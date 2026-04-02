@@ -1,0 +1,5 @@
+E5_cadets-deduplicated.json*
+E5_trace.json*
+E5_theia-deduplicated.json*
+*.txt
+!*.gz
