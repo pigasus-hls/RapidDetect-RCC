@@ -20,7 +20,7 @@ More details on the application and the system can be found in the [System Descr
 
 ### System Requirements (from AVED)
 
-- RHEL 9.4 with Kernel 5.14, and Ubuntu 24.04 with Kernel 6.8
+- RHEL 9.4 with Kernel 5.14 or Ubuntu 24.04 with Kernel 6.8
 
 ### Software Pre-requisites
 
