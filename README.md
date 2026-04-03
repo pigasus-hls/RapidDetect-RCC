@@ -1,6 +1,6 @@
 # RapidDetect (MSPM) on V80
 
-This version of RapidDetect is a 200Gbps hardware-accelerated threat detection system for streaming, structured system logs using [Sigma](https://github.com/sigmahq/sigma) rules. This repository, prepared for the FCCM 2026 Reconfigurable Computing Challenge, contains the Vitis HLS based implementation of the MSPM-only component of the full RapidDetect FPGA pipeline. The system is built for the V80 using AVED as a starting point and QDMA to move data and control information between the host and the FPGA. 
+This version of RapidDetect is an HLS-based 200Gbps (@400MHz) hardware-accelerated threat detection system for streaming, structured system logs using [Sigma](https://github.com/sigmahq/sigma) rules. This repository, prepared for the FCCM 2026 Reconfigurable Computing Challenge, contains the Vitis HLS based implementation of the MSPM-only component of the full RapidDetect FPGA pipeline. The system is built for the V80 (using < 1 out of 3 SLRs) using AVED as a starting point and QDMA to move data and control information between the host and the FPGA.
 
 RapidDetect is an ongoing collaboration between [Shashank Obla](https://github.com/shashankov) and [James C. Hoe](https://users.ece.cmu.edu/~jhoe/doku/doku.php) from Carnegie Mellon University with [Tommy Tracy II](https://github.com/tjt7a), Wajih Ul Hassan and Kevin Skadron from the University of Virginia.
 
