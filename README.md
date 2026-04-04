@@ -1,14 +1,16 @@
 # RapidDetect (MSPM) on V80
 
-This version of RapidDetect is an HLS-based 200Gbps (@400MHz) hardware-accelerated threat detection system for streaming, structured system logs using [Sigma](https://github.com/sigmahq/sigma) rules. This repository, prepared for the FCCM 2026 Reconfigurable Computing Challenge, contains the Vitis HLS based implementation of the MSPM-only component of the full RapidDetect FPGA pipeline. The system is built for the V80 (using < 1 out of 3 SLRs) using AVED as a starting point and QDMA to move data and control information between the host and the FPGA.
+RapidDetect is an HLS-based 200Gbps (@400MHz) hardware-accelerated threat detection system for streaming, structured system logs using [Sigma](https://github.com/sigmahq/sigma) rules. This repository, prepared for the FCCM 2026 Reconfigurable Computing Challenge, contains the Vitis HLS based implementation of the MSPM-only component of the full RapidDetect FPGA pipeline.
 
-RapidDetect is an ongoing collaboration between [Shashank Obla](https://github.com/shashankov) and [James C. Hoe](https://users.ece.cmu.edu/~jhoe/doku/doku.php) from Carnegie Mellon University with [Tommy Tracy II](https://github.com/tjt7a), Wajih Ul Hassan and Kevin Skadron from the University of Virginia.
+Inspired by [Pigasus Intrustion Prevention/Detection System](https://www.usenix.org/conference/osdi20/presentation/zhao-zhipeng), RapidDetect opts for a heterogeneous FPGA and CPU architecture for high-throughput, low-latency threat detection in streaming system logs. This version of the system is built for the V80 (occupying < 1 out of 3 SLRs) using AVED as a starting point and QDMA to move data and control information between the host and the FPGA. The Multi-String Pattern Matcher is capable of processing upwards of 10,000 string literals at 200Gbps (currently >4000 literals based on the ~200 Linux Sigma rules). 
 
-Inspired by [Pigasus Intrustion Prevention/Detection System](https://www.usenix.org/conference/osdi20/presentation/zhao-zhipeng), RapidDetect opts for a heterogeneous FPGA and CPU architecture for high-throughput, low-latency threat detection in streaming system logs. At a high-level the following diagram captures the system implemented in this repository (integration with Hyperscan is WIP):
+At a high-level the following diagram captures the system implemented in this repository (integration with Hyperscan is WIP). HBM is used as a stand-in for future support for streaming inputs directly from the network using ethernet with the FPGA placed as a bump-in-the-wire.
 
 ![Block diagram showing various components of the system including the FPGA kernels, memory (DRAM and HBM), CPU side software and the communication channels](./assets/system.png "RapidDetect on V80 System Diagram")
 
 More details on the application and the system can be found in the [System Description](./SYSTEM.md).
+
+RapidDetect is an ongoing collaboration between [Shashank Obla](https://github.com/shashankov) and [James C. Hoe](https://users.ece.cmu.edu/~jhoe/doku/doku.php) from Carnegie Mellon University with [Tommy Tracy II](https://github.com/tjt7a), Wajih Ul Hassan and Kevin Skadron from the University of Virginia.
 
 ## Requirements
 
@@ -165,4 +167,4 @@ make -C ../traces
 ./host.x ../traces/E5_cadets-deduplicated.json.500k
 ```
 
-Expected performance is ~172Gbps (which includes packetization overhead of finding and splitting the log events at newline).
+Expected performance is ~172Gbps (which includes packetization overhead of splitting the log events at newlines).
