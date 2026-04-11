@@ -429,9 +429,9 @@ proc create_hier_cell_RapidDetect { parentCell nameHier } {
   connect_bd_intf_net -intf_net resultSinkKernel_0_IoResultCountPipe [get_bd_intf_pins resultSinkKernel_0/IoResultCountPipe] [get_bd_intf_pins IoResultCountPipe/S_AXIS]
   connect_bd_intf_net -intf_net resultWriteKernel_0_m_axi_gmem0 [get_bd_intf_pins m_axi_gmem0] [get_bd_intf_pins resultWriteKernel_0/m_axi_gmem0]
   connect_bd_intf_net -intf_net s_axi_control1_1 [get_bd_intf_pins s_axi_control1] [get_bd_intf_pins resultWriteKernel_0/s_axi_control]
-  connect_bd_intf_net -intf_net smSteerPayloadKernel_0_PayloadMatchPipe [get_bd_intf_pins smSteerPayloadKernel_0/PayloadMatchPipe] [get_bd_intf_pins PayloadSinkPipe/S_AXIS]
+  connect_bd_intf_net -intf_net smSteerPayloadKernel_0_PayloadMatchPipe [get_bd_intf_pins smSteerPayloadKernel_0/PayloadMatchPipe] [get_bd_intf_pins HostPayloadPipe/S_AXIS]
   connect_bd_intf_net -intf_net smSteerPayloadKernel_0_PayloadSafePipe [get_bd_intf_pins smSteerPayloadKernel_0/PayloadSafePipe] [get_bd_intf_pins SmSafePayloadPipe/S_AXIS]
-  connect_bd_intf_net -intf_net smSteerPayloadKernel_0_RidMetaOutPipe [get_bd_intf_pins smSteerPayloadKernel_0/RidMetaOutPipe] [get_bd_intf_pins MetaOutPipe/S_AXIS]
+  connect_bd_intf_net -intf_net smSteerPayloadKernel_0_RidMetaOutPipe [get_bd_intf_pins smSteerPayloadKernel_0/RidMetaOutPipe] [get_bd_intf_pins HostMetaPipe/S_AXIS]
   connect_bd_intf_net -intf_net sm_kernel_0_ResultOutPipe [get_bd_intf_pins sm_kernel_0/ResultOutPipe] [get_bd_intf_pins SmMetaResultPipe/S_AXIS]
 
   # Create port connections
