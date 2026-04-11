@@ -185,7 +185,7 @@ make host.x
 ./host.x
 ```
 
-To run a real trace, first unzip the traces in the [traces directory](./traces) and execute the host code as follows:
+To run a real trace (the provided traces are derived from the [DARPA Transparent Computing Program](https://www.darpa.mil/research/programs/transparent-computing) generated during [Engagement #5](https://github.com/darpa-i2o/transparent-computing)), first unzip the traces in the [traces directory](./traces) and execute the host code as follows:
 
 ```bash
 make -C ../traces

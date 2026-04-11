@@ -23,12 +23,13 @@ SOFTWARE.
 ******************************************************************************/
 
 /**
- * Executes host side code to interact with the FPGA component of RapidDetect
+ * Executes host side code to interact with the FPGA component of RapidDetect and communicated with Hyperscan
  *
  * This includes:
+ * - Setting up shared memory and synchronization primitives to communicate with Hyperscan
  * - Setting up DMA transfers to send test patterns to the FPGA and read results back
  * - Writing to and reading from CSR registers to control the FPGA kernels and read status
- * - Processing the results read back from the FPGA and summarizing detection results
+ * - Reading FPGA output and writing it to the shared memory buffers for Hyperscan to consume
  * - Measuring and reporting execution time and throughput of the design
  */
 
