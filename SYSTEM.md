@@ -34,6 +34,6 @@ The core operation performed by RapidDetect on the FPGA is string matching on Fa
 
 The [compactor](./hardware/include/utils/compactor.h) is designed as a reduction tree of tasks and composed in a parametrizable fashion using template specialization based recursion in HLS. This causes C Simulation to launch a large number of threads (one per 2-to-1 compactor task), which only completes in reasonable time for smaller widths of the design (set to 50Gbps in the testbench script).
 
-### Hyperscan (WIP)
+### Hyperscan
 
 Finally Hyperscan filters the already filtered down traffic output from the FPGA design to remove as false positives by checking all the rules exactly. The packets are first moved to the host using DMA with Hyperscan running multi-threaded on the Host CPU. The host code processes the data and uses shared memory based communication to move the data to the Hyperscan worker threads.
