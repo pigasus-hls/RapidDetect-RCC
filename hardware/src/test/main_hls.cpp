@@ -126,7 +126,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char **argv) {
     tpNumPkt = loadDefaultTestInputBuffer(tpPaddedByteLen, tpPaddedPack, tpPaddedPktOffset);
   }
 
-  // Allocate host memory for trace results
+  // Allocate host memory for trace and payload results
   RidBcntPack *trace_host;
   posix_memalign((void **)&trace_host, 64, TRACE_SIZE / IO_WRITE_WIDTH * sizeof(RidBcntPack));
   if (trace_host == nullptr) {
@@ -134,25 +134,27 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char **argv) {
     exit(1);
   }
 
+  PayloadWritePack *payload_host;
+  posix_memalign((void **)&payload_host, 64, TRACE_SIZE * sizeof(PayloadWritePack));
+  if (payload_host == nullptr) {
+    std::cerr << "Failed to allocate host memory for payload_host" << std::endl;
+    exit(1);
+  }
+
   // Launch testbench kernel
   testbench_kernel(tpPaddedPack.getChannelVector(0).data(),
                    IO_HBM_NUM_CHANNELS > 1 ? tpPaddedPack.getChannelVector(1).data() : nullptr, trace_host,
-                   tpPaddedByteLen / IO_READ_BURSTSZ, TEST_SKIP_WRITE, TRACE_SIZE / IO_WRITE_WIDTH);
+                   payload_host, tpPaddedByteLen / IO_READ_BURSTSZ, false, TRACE_SIZE / IO_WRITE_WIDTH);
 
   // Process test results
   for (UINT idx = 0; idx < trace_host[0].ridBcnt[0].bcntSeq; idx++) {
     RidBcnt ridbcnt = trace_host[idx / IO_WRITE_WIDTH + 1].ridBcnt[idx % IO_WRITE_WIDTH];
 
     // Summarize results
-    if (!TEST_SKIP_WRITE) {
-      testPatternCheck(ridbcnt, idx, tpPaddedPack, tpPaddedPktOffset);
-    }
+    testPatternCheck(ridbcnt, idx, tpPaddedPack, tpPaddedPktOffset);
   }
 
   // Print summarized detection results
-  if (TEST_SKIP_WRITE) {
-    printf("\n\n*** NO RESULTS WRITE ON THIS TEST. ***\n\n");
-  }
   testPatternFinish();
 
   return 0;

@@ -42,6 +42,8 @@ class StripedVector {
   std::vector<T> vectors[NUM_CHANNELS];
 
  public:
+  StripedVector() = default;
+
   StripedVector(size_t size) {
     for (int i = 0; i < NUM_CHANNELS; i++) {
       vectors[i].resize(size);
@@ -80,6 +82,20 @@ class StripedVector {
 
   // Get the individual channel vector for direct access when needed (e.g. for DMA)
   std::vector<T> &getChannelVector(int channel) { return vectors[channel]; }
+};
+
+// Aligned read data struct; multiple words per flit; multiple flits per read.
+struct PayloadWordPack {
+  PAYLOAD_WORD word[MSPM_UNROLL];
+  BOOL eop;
+  BOOL switchPipe;
+  FTAG ftag[MSPM_UNROLL];  // field tag for each word
+  BOOL hasQuote;
+};
+
+// Aligned write data struct; multiple words per flit; possibly multiple flits per write.
+struct PayloadWritePack {
+  PAYLOAD_WORD words[HOST_PAYLOAD_WIDTH];
 };
 
 // Trace buffer detection entry format; need to be kept in 2-power sized

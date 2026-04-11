@@ -66,7 +66,12 @@ void sm_kernel(hls::stream<MspmPayloadFlit> &PayloadInPipe, hls::stream<SmResult
 
   hls_thread_local hls::stream<SmLookupAllResultMetaFlit, DFLT_PIPE_DEPTH> SmLookupAllResultMetaPipe(
       "SmLookupAllResultMetaPipe");
+
+#if SM_EXPAND_OVERLOADED
   hls_thread_local hls::stream<SmResultMetaFlit, DFLT_PIPE_DEPTH> SmResultMetaPipe("SmResultMetaPipe");
+#else
+  using SmResultMetaPipe = ResultOutPipe;  // directly write to output if not expanding overloaded RIDs
+#endif
 
   hls_thread_local hls::task mspm_hash_check_task(
       mspmHashCheckStage, PayloadInPipe, SmWideKeyMetaPipe0, SmWideKeyMetaPipe1, SmWideKeyMetaPipe2, SmWideKeyMetaPipe3,
@@ -104,5 +109,11 @@ void sm_kernel(hls::stream<MspmPayloadFlit> &PayloadInPipe, hls::stream<SmResult
       SmLookupByLenResultMetaPipe6, SmLookupByLenResultMetaPipe7, SmLookupAllResultMetaPipe);
   hls_thread_local hls::task mspm_result_downshift_task(mspmResultDownshift, SmLookupAllResultMetaPipe,
                                                         SmResultMetaPipe);
+
+#if SM_EXPAND_OVERLOADED == 1
+  hls_thread_local hls::task mspm_expand_overloaded_rid_lite_task(mspmExpandOverloadedRidLite, SmResultMetaPipe,
+                                                                  ResultOutPipe);
+#elif SM_EXPAND_OVERLOADED == 2
   hls_thread_local hls::task mspm_expand_overloaded_rid_task(mspmExpandOverloadedRid, SmResultMetaPipe, ResultOutPipe);
+#endif
 }

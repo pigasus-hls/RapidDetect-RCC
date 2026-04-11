@@ -1,3 +1,6 @@
 [submodule "dma_ip_drivers"]
 	path = dma_ip_drivers
 	url = https://github.com/Xilinx/dma_ip_drivers.git
+[submodule "software/hyperscan"]
+	path = software/hyperscan
+	url = https://github.com/intel/hyperscan.git

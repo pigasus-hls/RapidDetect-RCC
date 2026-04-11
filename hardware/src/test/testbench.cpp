@@ -224,13 +224,11 @@ void testPatternFinish() {
 
   std::cout << "NOCASE = " << NOCASE << "\n"
             << "TEST_PREPEND7 = " << TEST_PREPEND7 << "\n"
-            << "TEST_SAMEFLOW = " << TEST_SAMEFLOW << "\n"
-            << "TEST_SKIP_WRITE = " << TEST_SKIP_WRITE << "\n";
+            << "TEST_SAMEFLOW = " << TEST_SAMEFLOW << "\n";
 
   std::cout << "DFLT_PIPE_DEPTH = " << DFLT_PIPE_DEPTH << "\n";
 
-  // std::cout << "PROFILE = " << PROFILE << "\n";
-
+#if !SKIP_RULES_WRITE
   {
     int total = 0;
     [[maybe_unused]] int falseTotal = 0;
@@ -281,4 +279,5 @@ void testPatternFinish() {
     printf("seen rid=%d::sid=%d (len=%d) pattern [%4d] times at block [%4d]\n", i, rid2sid_table[i], rid2fplen_table[i],
            seenNumTimes[i], bcntLastSeen[i]);
   }
+#endif
 }

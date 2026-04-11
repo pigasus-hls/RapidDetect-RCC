@@ -228,7 +228,6 @@ void mspmHashLookupStageByLen(hls::stream<SmNarrowKeyMetaFlit> &HitsNarrowInPipe
   {
     SmLookupByLenResultMetaFlit ridFlit;
     BOOL hasHits = false;
-    hasHits = eop;
 
     ridFlit.eop = eop;
     for (UIDX which = 0; which < MSPM_LOOKUP_WIDTH; which++) {
@@ -246,7 +245,8 @@ void mspmHashLookupStageByLen(hls::stream<SmNarrowKeyMetaFlit> &HitsNarrowInPipe
       hasHits |= (ridPlusOne[which] != 0);
     }
 
-    if (hasHits) {
+    if (hasHits || eop) {
+      ridFlit.hasHits = hasHits;
       RidOutPipe.write(ridFlit);
     }
   }

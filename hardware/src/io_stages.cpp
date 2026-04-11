@@ -188,146 +188,12 @@ void mergePipesKernel(hls::stream<PayloadWordPack> &PayloadInPipe, hls::stream<P
   }
 }
 
-#define MAX_FIELD_LENGTH 11
-#define NUM_FIELDS 3
-
-// Hardcoded helper function to match fields of interest and tag them.
-// Can be edited to match different fields or use a different matching logic as needed.
-FTAG matchField(const char *data) {
-  // match syscall
-  const char matchFields[NUM_FIELDS][MAX_FIELD_LENGTH + 1] = {"\"syscall\": ", "****\"exe\": ", "***\"path\": "};
-
-  FTAG ftag = 0;  // Default to MISC
-  for (int i = 0; i < NUM_FIELDS; i++) {
-#pragma HLS UNROLL
-    BOOL match = true;
-    for (int j = 0; j < MAX_FIELD_LENGTH; j++) {
-#pragma HLS UNROLL
-      if ((data[j] != matchFields[i][j]) && (matchFields[i][j] != '*')) {
-        match = false;
-      }
-    }
-    ftag |= (match ? ((i + 1) & 3) : 0);
-  }
-
-  return ftag;
-}
-
-void fieldMatchKernel(hls::stream<PayloadWordPack> &PayloadInPipe, hls::stream<PayloadWordPack> &PayloadOutPipe) {
+void payloadSourceKernel(hls::stream<PayloadWordPack> &PayloadInPipe, hls::stream<MspmPayloadFlit> &PayloadOutPipe,
+                         hls::stream<MspmPayloadFlit> &PayloadForwardPipe) {
 #pragma HLS INTERFACE mode = ap_ctrl_none port = return
 #pragma HLS INTERFACE mode = axis port = PayloadInPipe
 #pragma HLS INTERFACE mode = axis port = PayloadOutPipe
-
-  char matchData[MAX_FIELD_LENGTH + MSPM_UNROLL * MSPM_MASK_WIDTH] = {0};
-
-  while (1) {
-#pragma HLS PIPELINE II = 1
-    PayloadWordPack wPack;
-    BOOL valid = PayloadInPipe.read_nb(wPack);
-
-    // Copy payload into matchData
-    for (int i = 0; i < MSPM_UNROLL * MSPM_MASK_WIDTH; i++) {
-#pragma HLS UNROLL
-      matchData[i + MAX_FIELD_LENGTH] = (wPack.word[i / MSPM_MASK_WIDTH] >> ((i % MSPM_MASK_WIDTH) * 8)) & 0xFF;
-    }
-
-    FTAG ftag[MSPM_UNROLL] = {0};  // field tag for each word
-    BOOL hasQuote = false;         // flag to indicate if a quote is found
-
-    // Mark all locations where the field matches
-    for (int i = 0; i < MSPM_UNROLL * MSPM_MASK_WIDTH; i++) {
-#pragma HLS UNROLL
-      ftag[i / MSPM_MASK_WIDTH] |= ((matchField(&matchData[i]) & 3) << ((i % MSPM_MASK_WIDTH) * 2));
-    }
-
-    // Propagate field matches until next quotation
-    FTAG prevFtag = 0;
-    for (int i = 0; i < MSPM_UNROLL * MSPM_MASK_WIDTH; i++) {
-#pragma HLS UNROLL
-      FTAG currentFtag = (ftag[i / MSPM_MASK_WIDTH] >> ((i % MSPM_MASK_WIDTH) * 2)) & 3;
-
-      // Always update; if prevFtag is 0, it will not change the current ftag, this is guaranteed to not overwrite
-      // the current ftag since it will become 0 before it hits a match (quotes in the field will reset it)
-      ftag[i / MSPM_MASK_WIDTH] |= ((prevFtag & 3) << ((i % MSPM_MASK_WIDTH) * 2));
-      prevFtag = (ftag[i / MSPM_MASK_WIDTH] >> ((i % MSPM_MASK_WIDTH) * 2)) & 3;  // Replace with new ftag
-      if ((currentFtag & 3) == 0 && matchData[i + MAX_FIELD_LENGTH] == '"') {
-        prevFtag = 0;     // reset ftag on quote
-        hasQuote = true;  // mark that we have a quote
-      }
-    }
-
-    // Copy last bytes to front of matchData for next iteration
-    for (int i = 0; i < MAX_FIELD_LENGTH; i++) {
-#pragma HLS UNROLL
-      if (wPack.eop & 1) {
-        matchData[i] = 0xFF;
-      } else if (valid) {
-        matchData[i] = matchData[i + MSPM_UNROLL * MSPM_MASK_WIDTH];
-      }
-    }
-
-    for (int i = 0; i < MSPM_UNROLL; i++) {
-#pragma HLS UNROLL
-      wPack.ftag[i] = ftag[i];  // copy field tag
-    }
-    wPack.hasQuote = hasQuote;  // mark if there was a quote
-    if (valid) PayloadOutPipe.write(wPack);
-  }
-}
-
-// Fix overflowing field tagging which is not handled in the previous kernel
-void fieldMatchFixOverflowKernel(hls::stream<PayloadWordPack> &PayloadInPipe,
-                                 hls::stream<PayloadWordPack> &PayloadOutPipe) {
-#pragma HLS INTERFACE mode = ap_ctrl_none port = return
-#pragma HLS INTERFACE mode = axis port = PayloadInPipe
-#pragma HLS INTERFACE mode = axis port = PayloadOutPipe
-
-  FTAG overflowFtag = 0;
-
-  while (1) {
-#pragma HLS PIPELINE II = 1
-    PayloadWordPack wPack;
-    BOOL valid = PayloadInPipe.read_nb(wPack);  // Check if the read was valid
-
-    FTAG currentFtag = (wPack.ftag[MSPM_UNROLL - 1] >> ((MSPM_MASK_WIDTH - 1) * 2)) & 3;  // Get last ftag bit
-    // Note: if the last byte is an end quote the overflow ftag should be 0 but it could also be a starting quote
-    // which would require more checks. Without checking we will only tag commas and spaces until the next field
-    // anyways so the extra taggings should be innocuous and I leave it as it is for now.
-
-    FTAG overflowFtagCopy = overflowFtag;  // Copy overflow ftag to use in the loop
-
-    for (int i = 0; i < MSPM_UNROLL * MSPM_MASK_WIDTH; i++) {
-#pragma HLS UNROLL
-      // FTAG thisFtag = wPack.ftag[i / MSPM_MASK_WIDTH] >> (i % MSPM_MASK_WIDTH) & 1;
-      // Shouldn't need this additional check since a quote would've reset it well before and at the beginning of
-      // the flit if it's matched, the overflowFtag will be 0 since the field would have preceded this flit
-      // if (overflowFtagCopy && !thisFtag) wPack.ftag[i / MSPM_MASK_WIDTH] |= (overflowFtagCopy << (i %
-      // MSPM_MASK_WIDTH)); If there is an overflowing non misc ftag and this ftag is misc, overwrite
-
-      if (overflowFtagCopy) {
-        wPack.ftag[i / MSPM_MASK_WIDTH] |= ((overflowFtagCopy & 3) << ((i % MSPM_MASK_WIDTH) * 2));
-      }
-      if ((wPack.word[i / MSPM_MASK_WIDTH] >> ((i % MSPM_MASK_WIDTH) * 8) & 0xFF) == '"') {
-        overflowFtagCopy = 0;  // reset overflow tag on quote
-      }
-    }
-
-    if (valid) PayloadOutPipe.write(wPack);
-
-    // If current flit has a quote, reset overflowFtag with current ftag else keep it from previous flit
-    // This is the feedback path which needs to be able to run every cycle
-    if (wPack.eop) {
-      overflowFtag = 0;  // reset on end of packet
-    } else if (valid) {
-      overflowFtag = ((wPack.hasQuote || ((currentFtag & 3) != 0)) ? currentFtag : overflowFtag) & 3;
-    }
-  }
-}
-
-void payloadSourceKernel(hls::stream<PayloadWordPack> &PayloadInPipe, hls::stream<MspmPayloadFlit> &PayloadOutPipe) {
-#pragma HLS INTERFACE mode = ap_ctrl_none port = return
-#pragma HLS INTERFACE mode = axis port = PayloadInPipe
-#pragma HLS INTERFACE mode = axis port = PayloadOutPipe
+#pragma HLS INTERFACE mode = axis port = PayloadForwardPipe
 
   // Source Stage: inject flits to SM pipeline
   USEQ seq = 0;
@@ -356,17 +222,18 @@ void payloadSourceKernel(hls::stream<PayloadWordPack> &PayloadInPipe, hls::strea
     }
 
     // push a word flit to stage 1
-    if (valid) PayloadOutPipe.write(flit);
-    // SmForwardPayloadPipe::write(flit);
-    // ProfileSmCountPipe::write(flit.eop);
+    if (valid) {
+      PayloadOutPipe.write(flit);
+      PayloadForwardPipe.write(flit);
+    }
   }
 }
 
 // Format detection pipeline result for writing to DRAM
-void resultSinkKernel(hls::stream<SmResultMetaFlit> &SmResultMetaPipe, hls::stream<RidBcntFlit> &IoBurstWritePipe,
+void resultSinkKernel(hls::stream<HostMetaFlit> &RidMetaInPipe, hls::stream<RidBcntFlit> &IoBurstWritePipe,
                       hls::stream<BOOL> &IoDoneCountPipe, hls::stream<BOOL> &IoResultCountPipe) {
 #pragma HLS INTERFACE mode = ap_ctrl_none port = return
-#pragma HLS INTERFACE mode = axis port = SmResultMetaPipe
+#pragma HLS INTERFACE mode = axis port = RidMetaInPipe
 #pragma HLS INTERFACE mode = axis port = IoBurstWritePipe
 #pragma HLS INTERFACE mode = axis port = IoDoneCountPipe
 #pragma HLS INTERFACE mode = axis port = IoResultCountPipe
@@ -378,7 +245,7 @@ void resultSinkKernel(hls::stream<SmResultMetaFlit> &SmResultMetaPipe, hls::stre
 
   while (1) {
 #pragma HLS PIPELINE II = 1
-    URID ridPlusOne[IO_RESULT_WIDTH] = {};
+    URID ridPlusOne[HOST_RESULT_WIDTH] = {};
     BOOL valid = false;
     [[maybe_unused]] UINT now = bcnt;
     BOOL hasHits = false;
@@ -389,15 +256,17 @@ void resultSinkKernel(hls::stream<SmResultMetaFlit> &SmResultMetaPipe, hls::stre
     done = done && valid;
     valid = false;
 
-    SmResultMetaFlit ridFlit;
-    valid = SmResultMetaPipe.read_nb(ridFlit);
+    HostMetaFlit ridFlit;
+    valid = RidMetaInPipe.read_nb(ridFlit);
 
     if (valid) {
-      for (int which = 0; which < IO_RESULT_WIDTH; which++) {
+      for (int which = 0; which < HOST_RESULT_WIDTH; which++) {
 #pragma HLS UNROLL
         // register a flagged rule id;
         ridPlusOne[which] = ridFlit.payload[which].ridPlusOne;
-        hasHits |= (ridPlusOne[which] != 0);
+
+        // hasHits check is performed in the flagger before the results reach this sink kernel
+        // hasHits |= (ridPlusOne[which] != 0);
       }
       if (ridFlit.eop) {
         IoResultCountPipe.write(true);  // signal end of packet
@@ -405,21 +274,21 @@ void resultSinkKernel(hls::stream<SmResultMetaFlit> &SmResultMetaPipe, hls::stre
       }
     }  // if (valid)
 
-    if (hasHits) {
+    if (valid) {
       {
-        for (int which = 0; which < IO_RESULT_WIDTH; which++) {
+        for (int which = 0; which < HOST_RESULT_WIDTH; which++) {
 #pragma HLS UNROLL
-          wideFlit.ridBcnt[round * IO_RESULT_WIDTH + which].ridPlusOne = ridPlusOne[which];
+          wideFlit.ridBcnt[round * HOST_RESULT_WIDTH + which].ridPlusOne = ridPlusOne[which];
 #if MSPM_TRACKSEQ
-          wideFlit.ridBcnt[round * IO_RESULT_WIDTH + which].bcntSeq = ridFlit.payload[which].seq;
+          wideFlit.ridBcnt[round * HOST_RESULT_WIDTH + which].bcntSeq = ridFlit.payload[which].seq;
 #else
-          wideFlit.ridBcnt[round * IO_RESULT_WIDTH + which].bcntSeq = now;
+          wideFlit.ridBcnt[round * HOST_RESULT_WIDTH + which].bcntSeq = now;
 #endif
 #if MSPM_TRACKPOS
-          wideFlit.ridBcnt[round * IO_RESULT_WIDTH + which].pos = ridFlit.payload[which].pos;
+          wideFlit.ridBcnt[round * HOST_RESULT_WIDTH + which].pos = ridFlit.payload[which].pos;
 #endif
 #if MSPM_CHECKTAG && MSPM_RESOLVE_CONFLICT && !SM_EXPAND_OVERLOADED
-          wideFlit.ridBcnt[round * IO_RESULT_WIDTH + which].tag = ridFlit.payload[which].tag;
+          wideFlit.ridBcnt[round * HOST_RESULT_WIDTH + which].tag = ridFlit.payload[which].tag;
 #endif
         }
         wideFlit.terminate = done;  // signal end of test
@@ -491,28 +360,125 @@ void resultWriteKernel(RidBcntPack *trace_device, BOOL skipWrite, UINT buffer_si
   trace_device[0].ridBcnt[0].ridPlusOne = done ? 0 : 1;  // store done status in first word
 }  // sink kernel
 
+void payloadWriteKernel(PayloadWritePack *payload_sink_device, UINT count, BOOL skipWrite, UINT max_size,
+                        hls::stream<HostPayloadFlit> &PayloadInPipe, hls::stream<BOOL> &IoPayloadCountPipe,
+                        hls::stream<BOOL> &IoPayloadDoneCountPipe) {
+#pragma HLS INTERFACE mode = m_axi port = payload_sink_device bundle = gmem0 depth = 8192
+#pragma HLS INTERFACE mode = s_axilite port = count
+#pragma HLS INTERFACE mode = s_axilite port = skipWrite
+#pragma HLS INTERFACE mode = s_axilite port = max_size
+#pragma HLS INTERFACE mode = s_axilite port = return
+#pragma HLS INTERFACE mode = axis port = PayloadInPipe
+#pragma HLS INTERFACE mode = axis port = IoPayloadCountPipe
+#pragma HLS INTERFACE mode = axis port = IoPayloadDoneCountPipe
+
+  UINT num_words_written = 0;
+  BOOL done = false, overflow = false;
+
+  uint8_t index = 0;
+  PayloadWritePack pack;
+
+  // Run the loop until count number of cycles or until done signal is received
+  for (UINT i = 0; ((i < count) || skipWrite) && !done; i++) {
+#pragma HLS PIPELINE II = 1
+    BOOL flit_valid = false, valid = false;
+
+    // Read flit from pipe
+    HostPayloadFlit flit;
+    flit_valid = PayloadInPipe.read_nb(flit);
+    if (flit_valid) {
+      for (uint8_t j = 0; j < HOST_PAYLOAD_WIDTH; j++) {
+#pragma HLS UNROLL
+        pack.words[index * HOST_PAYLOAD_WIDTH + j] = flit.word[j];
+      }
+      if (flit.eop) {
+        // Signal eop to count pipe
+        IoPayloadCountPipe.write(true);
+      }
+    }
+
+    // Is the pipeline done?
+    valid = IoPayloadDoneCountPipe.read_nb(done);
+    if (valid) done = true;
+
+    if ((flit.eop || ((index + 1) * HOST_PAYLOAD_WIDTH == PAYLOAD_WRITE_WIDTH)) && flit_valid) {
+      index = 0;
+      for (uint8_t j = 0; j < PAYLOAD_WRITE_WIDTH; j++) {
+#pragma HLS UNROLL
+        if (flit.eop && (j == ((uint8_t)PAYLOAD_WRITE_WIDTH - 1))) {
+          // If it's the last word and EOP is set MSB to newline
+          pack.words[j] = (pack.words[j] & (~(PAYLOAD_WORD)0xFF00000000000000)) | ((PAYLOAD_WORD)'\n' << 56);
+        }
+      }
+
+      // Write flit words to DRAM
+      if (skipWrite || !flit_valid) {
+        continue;  // Skip writing this flit
+      } else if (num_words_written >= max_size) {
+        overflow = true;
+        continue;  // No more space to write
+      }
+
+      payload_sink_device[num_words_written / PAYLOAD_WRITE_WIDTH + 1] = pack;
+      for (uint8_t j = 0; j < PAYLOAD_WRITE_WIDTH; j++) {
+#pragma HLS UNROLL
+        pack.words[j] = (PAYLOAD_WORD)(0xFFFFFFFFFFFFFFFF);  // Reset word to all FFs
+      }
+      num_words_written += PAYLOAD_WRITE_WIDTH;
+    } else if (flit_valid) {
+      index++;
+    }
+  }
+
+  // Write the number of words written
+  if (!skipWrite) {
+    // Store the number of words written at the start of the buffer
+    // Store the done status so that this kernel is not called again
+    // Store the overflow status
+    pack.words[0] = (((PAYLOAD_WORD)num_words_written) << 32) + (done ? 0b010 : 0) + (overflow ? 0b001 : 0);
+  }
+  payload_sink_device[0] = pack;
+}
+
 void doneCountKernel(hls::stream<BOOL> &IoInCountPipe, hls::stream<BOOL> &IoResultCountPipe,
-                     hls::stream<BOOL> &IoDoneCountPipe) {
+                     hls::stream<BOOL> &IoPayloadCountPipe, hls::stream<MspmPayloadFlit> &SmPayloadSafePipe,
+                     hls::stream<BOOL> &IoDoneCountPipe, hls::stream<BOOL> &IoPayloadDoneCountPipe) {
 #pragma HLS INTERFACE mode = ap_ctrl_none port = return
 #pragma HLS INTERFACE mode = axis port = IoInCountPipe
 #pragma HLS INTERFACE mode = axis port = IoResultCountPipe
+#pragma HLS INTERFACE mode = axis port = IoPayloadCountPipe
+#pragma HLS INTERFACE mode = axis port = SmPayloadSafePipe
 #pragma HLS INTERFACE mode = axis port = IoDoneCountPipe
+#pragma HLS INTERFACE mode = axis port = IoPayloadDoneCountPipe
 
   UINT inCountCurrent = 0, inCountOld = 0, outCount = 0;
-  BOOL doneCondition = false, extraOutput = false;
-  BOOL inDone = false;
+  UINT inPayloadCountCurrent = 0, inPayloadCountOld = 0, outPayloadCount = 0;
+
+  BOOL doneCondition = false, extraOutput = false, payloadDoneCondition = false, payloadExtraOutput = false;
+  BOOL inDone = false, inPayloadDone = false;
   BOOL inEop = false;
 
-  BOOL inValid = false, inDoneValid = false, resultValid = false;
+  BOOL inValid = false, inDoneValid = false, resultValid = false, payloadMatchValid = false, payloadSafeValid = false;
   while (1) {
 #pragma HLS PIPELINE II = 1
     if (doneCondition) {
       IoDoneCountPipe.write(true);  // signal done
       inDone = false;               // reset inDone for the next input
       inCountOld = 0;
-      outCount = extraOutput ? 1 : 0;  // if there is an extra output after done condition, count it in the next round
+      // if there is an extra output after done condition, count it in the next round
+      outCount = extraOutput ? 1 : 0;
     }
+
+    if (payloadDoneCondition) {
+      IoPayloadDoneCountPipe.write(true);  // signal payload done
+      inPayloadDone = false;               // reset inPayloadDone for the next input
+      inPayloadCountOld = 0;
+      // if there is an extra output after payload done condition, count it in the next round
+      outPayloadCount = payloadExtraOutput ? 1 : 0;
+    }
+
     doneCondition = (inCountOld == outCount) && inDone;
+    payloadDoneCondition = (inPayloadCountOld == outPayloadCount) && inPayloadDone;
 
     if (!inEop) {
       BOOL temp;
@@ -521,22 +487,42 @@ void doneCountKernel(hls::stream<BOOL> &IoInCountPipe, hls::stream<BOOL> &IoResu
     }
 
     if (inEop) {
-      if (!inDone) {
+      if (!inDone && !inPayloadDone) {
         inEop = false;
 
         inDone = true;
         inCountOld = inCountCurrent;
         inCountCurrent = 0;
+
+        inPayloadDone = true;
+        inPayloadCountOld = inPayloadCountCurrent;
+        inPayloadCountCurrent = 0;
       }
     } else if (inValid && !inEop) {
       inCountCurrent++;
+      inPayloadCountCurrent++;
     }
 
-    [[maybe_unused]] BOOL outEop;
+    BOOL outEop;
+    MspmPayloadFlit safeFlit;
     resultValid = IoResultCountPipe.read_nb(outEop);
-    if (resultValid) {
-      outCount++;
-    }
-    extraOutput = resultValid;
+    payloadMatchValid = IoPayloadCountPipe.read_nb(outEop);
+    payloadSafeValid = SmPayloadSafePipe.read_nb(safeFlit);
+
+    // only count payloads that have completed processing in the pipeline
+    payloadSafeValid = payloadSafeValid && safeFlit.eop;
+
+    outCount += resultValid + payloadSafeValid;
+    outPayloadCount += payloadMatchValid + payloadSafeValid;
+
+    extraOutput = resultValid + payloadSafeValid;
+    payloadExtraOutput = payloadMatchValid + payloadSafeValid;
+
+    // if (resultValid || payloadSafeValid || payloadMatchValid || inValid) {
+    //   std::cout << "Current input count: " << inCountCurrent
+    //             << ", Current payload input count: " << inPayloadCountCurrent << ", Current output count: " <<
+    //             outCount
+    //             << ", Current payload output count: " << outPayloadCount << std::endl;
+    // }
   }
 }

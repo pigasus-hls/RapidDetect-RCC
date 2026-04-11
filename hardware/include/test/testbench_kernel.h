@@ -28,4 +28,5 @@ SOFTWARE.
 
 /// Testbench wrapper kernel combining all kernels including string matcher and other IO kernels
 void testbench_kernel(RawPayloadPack* testpattern_device_0, RawPayloadPack* testpattern_device_1,
-                      RidBcntPack* trace_device, UINT count, BOOL skipWrite, UINT buffer_size);
+                      RidBcntPack* trace_device, PayloadWritePack* payload_sink_device, UINT count, BOOL skipWrite,
+                      UINT buffer_size);

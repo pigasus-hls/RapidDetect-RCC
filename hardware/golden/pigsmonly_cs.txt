@@ -13,17 +13,19 @@ INFO: [HLS 200-1465] Applying config ini 'syn.file=../../src/mspm/mspm.cpp' from
 INFO: [HLS 200-10] Adding design file '/home/sobla/workspace/RapidDetectV80/hardware/src/mspm/mspm.cpp' to the project
 INFO: [HLS 200-1465] Applying config ini 'syn.file=../../src/sm_kernel.cpp' from /home/sobla/workspace/RapidDetectV80/hardware/hls_workspace/rapidd_testbench/hls_config.cfg(16)
 INFO: [HLS 200-10] Adding design file '/home/sobla/workspace/RapidDetectV80/hardware/src/sm_kernel.cpp' to the project
-INFO: [HLS 200-1465] Applying config ini 'syn.file=../../src/test/testbench_kernel.cpp' from /home/sobla/workspace/RapidDetectV80/hardware/hls_workspace/rapidd_testbench/hls_config.cfg(17)
+INFO: [HLS 200-1465] Applying config ini 'syn.file=../../src/rapidd_stages.cpp' from /home/sobla/workspace/RapidDetectV80/hardware/hls_workspace/rapidd_testbench/hls_config.cfg(17)
+INFO: [HLS 200-10] Adding design file '/home/sobla/workspace/RapidDetectV80/hardware/src/rapidd_stages.cpp' to the project
+INFO: [HLS 200-1465] Applying config ini 'syn.file=../../src/test/testbench_kernel.cpp' from /home/sobla/workspace/RapidDetectV80/hardware/hls_workspace/rapidd_testbench/hls_config.cfg(18)
 INFO: [HLS 200-10] Adding design file '/home/sobla/workspace/RapidDetectV80/hardware/src/test/testbench_kernel.cpp' to the project
-INFO: [HLS 200-1465] Applying config ini 'syn.csimflags=-I../../include -std=c++17 -DMSPM_TRACKPOS=1 -DMSPM_RESOLVE_CONFLICT=1 -DTEST_SAMEFLOW=0 -DTEST_PREPEND7=0 -DMSPM_UNROLL=2 -DMSPM_CHECKFIELD=0 -DIO_HBM_NUM_CHANNELS=2' from /home/sobla/workspace/RapidDetectV80/hardware/hls_workspace/rapidd_testbench/hls_config.cfg(22)
-INFO: [HLS 200-1465] Applying config ini 'tb.file=../../src/test/testbench.cpp' from /home/sobla/workspace/RapidDetectV80/hardware/hls_workspace/rapidd_testbench/hls_config.cfg(18)
+INFO: [HLS 200-1465] Applying config ini 'syn.csimflags=-I../../include -std=c++17 -DMSPM_TRACKPOS=1 -DMSPM_RESOLVE_CONFLICT=1 -DTEST_SAMEFLOW=0 -DTEST_PREPEND7=0 -DMSPM_UNROLL=2 -DMSPM_CHECKFIELD=0 -DIO_HBM_NUM_CHANNELS=2' from /home/sobla/workspace/RapidDetectV80/hardware/hls_workspace/rapidd_testbench/hls_config.cfg(23)
+INFO: [HLS 200-1465] Applying config ini 'tb.file=../../src/test/testbench.cpp' from /home/sobla/workspace/RapidDetectV80/hardware/hls_workspace/rapidd_testbench/hls_config.cfg(19)
 INFO: [HLS 200-10] Adding test bench file '/home/sobla/workspace/RapidDetectV80/hardware/src/test/testbench.cpp' to the project
-INFO: [HLS 200-1465] Applying config ini 'tb.file=../../src/test/testinit.cpp' from /home/sobla/workspace/RapidDetectV80/hardware/hls_workspace/rapidd_testbench/hls_config.cfg(19)
+INFO: [HLS 200-1465] Applying config ini 'tb.file=../../src/test/testinit.cpp' from /home/sobla/workspace/RapidDetectV80/hardware/hls_workspace/rapidd_testbench/hls_config.cfg(20)
 INFO: [HLS 200-10] Adding test bench file '/home/sobla/workspace/RapidDetectV80/hardware/src/test/testinit.cpp' to the project
-INFO: [HLS 200-1465] Applying config ini 'tb.file=../../src/test/main_hls.cpp' from /home/sobla/workspace/RapidDetectV80/hardware/hls_workspace/rapidd_testbench/hls_config.cfg(20)
+INFO: [HLS 200-1465] Applying config ini 'tb.file=../../src/test/main_hls.cpp' from /home/sobla/workspace/RapidDetectV80/hardware/hls_workspace/rapidd_testbench/hls_config.cfg(21)
 INFO: [HLS 200-10] Adding test bench file '/home/sobla/workspace/RapidDetectV80/hardware/src/test/main_hls.cpp' to the project
-INFO: [HLS 200-1465] Applying config ini 'tb.cflags=-I../../include -std=c++17 -DMSPM_TRACKPOS=1 -DMSPM_RESOLVE_CONFLICT=1 -DTEST_SAMEFLOW=0 -DTEST_PREPEND7=0 -DMSPM_UNROLL=2 -DMSPM_CHECKFIELD=0 -DIO_HBM_NUM_CHANNELS=2' from /home/sobla/workspace/RapidDetectV80/hardware/hls_workspace/rapidd_testbench/hls_config.cfg(21)
-INFO: [HLS 200-1465] Applying config ini 'syn.top=testbench_kernel' from /home/sobla/workspace/RapidDetectV80/hardware/hls_workspace/rapidd_testbench/hls_config.cfg(23)
+INFO: [HLS 200-1465] Applying config ini 'tb.cflags=-I../../include -std=c++17 -DMSPM_TRACKPOS=1 -DMSPM_RESOLVE_CONFLICT=1 -DTEST_SAMEFLOW=0 -DTEST_PREPEND7=0 -DMSPM_UNROLL=2 -DMSPM_CHECKFIELD=0 -DIO_HBM_NUM_CHANNELS=2' from /home/sobla/workspace/RapidDetectV80/hardware/hls_workspace/rapidd_testbench/hls_config.cfg(22)
+INFO: [HLS 200-1465] Applying config ini 'syn.top=testbench_kernel' from /home/sobla/workspace/RapidDetectV80/hardware/hls_workspace/rapidd_testbench/hls_config.cfg(24)
 INFO: [HLS 200-1465] Applying config ini 'flow_target=vivado' from /home/sobla/workspace/RapidDetectV80/hardware/hls_workspace/rapidd_testbench/hls_config.cfg(4)
 INFO: [HLS 200-1505] Using flow_target 'vivado'
 Resolution: For help on HLS 200-1505 see docs.xilinx.com/access/sources/dita/topic?Doc_Version=2025.1%20English&url=ug1448-hls-guidance&resourceid=200-1505.html
@@ -46,6 +48,7 @@ INFO: [HLS 200-2036] Building optimized C Simulation binaries
    Compiling ../../../../../../src/test/testinit.cpp in release mode
    Compiling ../../../../../../src/test/testbench.cpp in release mode
    Compiling ../../../../../../src/test/testbench_kernel.cpp in release mode
+   Compiling ../../../../../../src/rapidd_stages.cpp in release mode
    Compiling ../../../../../../src/sm_kernel.cpp in release mode
    Compiling ../../../../../../src/mspm/mspm.cpp in release mode
    Compiling ../../../../../../src/sm.cpp in release mode
@@ -77,11 +80,12 @@ SM_INPKT_SEQ = 0
 IO_READ_BURST=256
 IO_READ_MULT=1 (16)
 IO_WRITE_MULT=1 (40)
-SM_ONLY = 0
+SM_ONLY = 1
+SKIP_RULES_WRITE = 0
+SKIP_PAYLOAD_WRITE = 0
 NOCASE = 0
 TEST_PREPEND7 = 0
 TEST_SAMEFLOW = 0
-TEST_SKIP_WRITE = 0
 DFLT_PIPE_DEPTH = 16
 Rules Encountered len2: 714 (false 662, 92.717087 percent)
 Rules Encountered len3: 2363 (false 2228, 94.286923 percent)
@@ -4441,8 +4445,8 @@ seen rid=4344::sid=50971 (len=4) pattern [  36] times at block [4344]
 seen rid=4345::sid=50972 (len=4) pattern [  35] times at block [4345]
 seen rid=4346::sid=50973 (len=6) pattern [  60] times at block [4346]
 seen rid=4347::sid=60200 (len=6) pattern [   2] times at block [4348]
-INFO [HLS SIM]: The maximum depth reached by any hls::stream() instance in the design is 20972
+INFO [HLS SIM]: The maximum depth reached by any hls::stream() instance in the design is 85823
 INFO: [SIM 211-1] CSim done with 0 errors.
 INFO: [SIM 211-3] *************** CSIM finish ***************
-INFO: [HLS 200-112] Total CPU user time: 491.3 seconds. Total CPU system time: 174.29 seconds. Total elapsed time: 51.57 seconds; peak allocated memory: 620.859 MB.
-INFO: [vitis-run 60-791] Total elapsed time: 0h 0m 55s
+INFO: [HLS 200-112] Total CPU user time: 416.5 seconds. Total CPU system time: 129.45 seconds. Total elapsed time: 45.87 seconds; peak allocated memory: 620.816 MB.
+INFO: [vitis-run 60-791] Total elapsed time: 0h 0m 49s

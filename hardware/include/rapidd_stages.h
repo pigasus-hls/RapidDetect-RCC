@@ -25,43 +25,22 @@ SOFTWARE.
 
 #pragma once
 
-#include <utils/types.h>
+/**
+ * Field Tagging and Plumbing Stages for RapidDetect
+ */
+#include <hls_stream.h>
 #include <io_types.h>
+#include <sm.h>
 
-#include <vector>
+// Parse JSON formatted input packets to tag the values with their corresponding field type
+void fieldMatchKernel(hls::stream<PayloadWordPack> &PayloadInPipe, hls::stream<PayloadWordPack> &PayloadOutPipe);
 
-#ifndef NOCASE
-#define NOCASE (0)
-#endif
+// One JSON entry might be larger than the maximum payload flit size, so this kernel progagtes the field tags across
+// multiple flits
+void fieldMatchFixOverflowKernel(hls::stream<PayloadWordPack> &PayloadInPipe,
+                                 hls::stream<PayloadWordPack> &PayloadOutPipe);
 
-#ifndef TEST_PREPEND7
-#define TEST_PREPEND7 (0)
-#endif
-
-#ifndef TEST_SAMEFLOW
-#define TEST_SAMEFLOW (0)
-#endif
-
-#ifndef TEST_FALSE_POSITIVES
-#define TEST_FALSE_POSITIVES (1)
-#endif
-
-#if NOCASE
-#include "testpattern3_nocase.h"
-#else
-#include "testpattern3.h"
-#endif
-
-/// Check test pattern results against expected results and accumulate data for summary statistics
-template <typename T>
-void testPatternCheck(
-    RidBcnt ridBcnt,  // detection entry
-                      // data accumulation
-    UINT tidx,        // position in trace buffer
-                      // data accumulation for false positive
-                      // checking; only works if positions are tracked
-    StripedVector<T, IO_HBM_NUM_CHANNELS, MSPM_MASK_WIDTH * MSPM_UNROLL / IO_HBM_NUM_CHANNELS> &pktBuff,
-    std::vector<UINT> &pktOffset);
-
-/// Dump test results
-void testPatternFinish();
+// Steer payloads based on SM matching results
+void smSteerPayloadKernel(hls::stream<MspmPayloadFlit> &PayloadInPipe, hls::stream<SmResultMetaFlit> &RidMetaInPipe,
+                          hls::stream<MspmPayloadFlit> &PayloadMatchPipe, hls::stream<MspmPayloadFlit> &PayloadSafePipe,
+                          hls::stream<SmResultMetaFlit> &RidMetaOutPipe);

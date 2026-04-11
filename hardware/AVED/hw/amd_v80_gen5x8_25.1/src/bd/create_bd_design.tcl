@@ -86,6 +86,8 @@ xilinx.com:hls:resultWriteKernel:1.0\
 xilinx.com:hls:mergePipesKernel:1.0\
 xilinx.com:hls:fieldMatchKernel:1.0\
 xilinx.com:hls:fieldMatchFixOverflowKernel:1.0\
+xilinx.com:hls:payloadWriteKernel:1.0\
+xilinx.com:hls:smSteerPayloadKernel:1.0\
 xilinx.com:inline_hdl:ilconcat:1.0\
 xilinx.com:inline_hdl:ilreduced_logic:1.0\
 xilinx.com:inline_hdl:ilvector_logic:1.0\
@@ -256,10 +258,15 @@ proc create_hier_cell_RapidDetect { parentCell nameHier } {
 
   create_bd_intf_pin -mode Master -vlnv xilinx.com:interface:aximm_rtl:1.0 m_axi_gmem3
 
+  create_bd_intf_pin -mode Slave -vlnv xilinx.com:interface:aximm_rtl:1.0 s_axi_control2
+
+  create_bd_intf_pin -mode Master -vlnv xilinx.com:interface:aximm_rtl:1.0 m_axi_gmem1
+
 
   # Create pins
   create_bd_pin -dir I -type clk ap_clk
   create_bd_pin -dir I -type rst ap_rst_n
+  create_bd_pin -dir I -type rst s_axis_aresetn
 
   # Create instance: sm_kernel_0, and set properties
   set sm_kernel_0 [ create_bd_cell -type ip -vlnv xilinx.com:hls:sm_kernel:1.0 sm_kernel_0 ]
@@ -298,7 +305,7 @@ proc create_hier_cell_RapidDetect { parentCell nameHier } {
 
   # Create instance: SmInputPayloadPipe, and set properties
   set SmInputPayloadPipe [ create_bd_cell -type ip -vlnv xilinx.com:ip:axis_data_fifo:2.0 SmInputPayloadPipe ]
-  set_property CONFIG.FIFO_DEPTH {64} $SmInputPayloadPipe
+  set_property CONFIG.FIFO_DEPTH {16} $SmInputPayloadPipe
 
 
   # Create instance: SmMetaResultPipe, and set properties
@@ -348,33 +355,83 @@ proc create_hier_cell_RapidDetect { parentCell nameHier } {
   set_property CONFIG.FIFO_DEPTH {16} $IoPayloadFieldPipe
 
 
+  # Create instance: payloadWriteKernel_0, and set properties
+  set payloadWriteKernel_0 [ create_bd_cell -type ip -vlnv xilinx.com:hls:payloadWriteKernel:1.0 payloadWriteKernel_0 ]
+
+  # Create instance: smSteerPayloadKernel_0, and set properties
+  set smSteerPayloadKernel_0 [ create_bd_cell -type ip -vlnv xilinx.com:hls:smSteerPayloadKernel:1.0 smSteerPayloadKernel_0 ]
+
+  # Create instance: SmForwardPayloadPipe, and set properties
+  set SmForwardPayloadPipe [ create_bd_cell -type ip -vlnv xilinx.com:ip:axis_data_fifo:2.0 SmForwardPayloadPipe ]
+  set_property CONFIG.FIFO_DEPTH {2048} $SmForwardPayloadPipe
+
+
+  # Create instance: HostPayloadPipe, and set properties
+  set HostPayloadPipe [ create_bd_cell -type ip -vlnv xilinx.com:ip:axis_data_fifo:2.0 HostPayloadPipe ]
+  set_property CONFIG.FIFO_DEPTH {16} $HostPayloadPipe
+
+
+  # Create instance: HostMetaPipe, and set properties
+  set HostMetaPipe [ create_bd_cell -type ip -vlnv xilinx.com:ip:axis_data_fifo:2.0 HostMetaPipe ]
+  set_property CONFIG.FIFO_DEPTH {16} $HostMetaPipe
+
+
+  # Create instance: IoPayloadCountPipe, and set properties
+  set IoPayloadCountPipe [ create_bd_cell -type ip -vlnv xilinx.com:ip:axis_data_fifo:2.0 IoPayloadCountPipe ]
+  set_property CONFIG.FIFO_DEPTH {16} $IoPayloadCountPipe
+
+
+  # Create instance: IoPayloadDoneCountPipe, and set properties
+  set IoPayloadDoneCountPipe [ create_bd_cell -type ip -vlnv xilinx.com:ip:axis_data_fifo:2.0 IoPayloadDoneCountPipe ]
+  set_property CONFIG.FIFO_DEPTH {16} $IoPayloadDoneCountPipe
+
+
+  # Create instance: SmSafePayloadPipe, and set properties
+  set SmSafePayloadPipe [ create_bd_cell -type ip -vlnv xilinx.com:ip:axis_data_fifo:2.0 SmSafePayloadPipe ]
+  set_property CONFIG.FIFO_DEPTH {16} $SmSafePayloadPipe
+
+
   # Create interface connections
   connect_bd_intf_net -intf_net Conn1 [get_bd_intf_pins payloadReadKernel_0/m_axi_gmem0] [get_bd_intf_pins m_axi_gmem2]
   connect_bd_intf_net -intf_net Conn2 [get_bd_intf_pins payloadReadKernel_0/m_axi_gmem1] [get_bd_intf_pins m_axi_gmem3]
   connect_bd_intf_net -intf_net Conn3 [get_bd_intf_pins payloadReadKernel_0/s_axi_control] [get_bd_intf_pins s_axi_control]
+  connect_bd_intf_net -intf_net Conn4 [get_bd_intf_pins payloadWriteKernel_0/s_axi_control] [get_bd_intf_pins s_axi_control2]
+  connect_bd_intf_net -intf_net Conn5 [get_bd_intf_pins payloadWriteKernel_0/m_axi_gmem0] [get_bd_intf_pins m_axi_gmem1]
   connect_bd_intf_net -intf_net IoBurstWritePipe_M_AXIS [get_bd_intf_pins IoBurstWritePipe/M_AXIS] [get_bd_intf_pins resultWriteKernel_0/IoBurstWritePipe]
   connect_bd_intf_net -intf_net IoDoneCountPipe_M_AXIS [get_bd_intf_pins IoDoneCountPipe/M_AXIS] [get_bd_intf_pins resultSinkKernel_0/IoDoneCountPipe]
   connect_bd_intf_net -intf_net IoInCountPipe_M_AXIS [get_bd_intf_pins IoInCountPipe/M_AXIS] [get_bd_intf_pins doneCountKernel_0/IoInCountPipe]
+  connect_bd_intf_net -intf_net IoPayloadCountPipe_M_AXIS [get_bd_intf_pins IoPayloadCountPipe/M_AXIS] [get_bd_intf_pins doneCountKernel_0/IoPayloadCountPipe]
+  connect_bd_intf_net -intf_net IoPayloadDoneCountPipe_M_AXIS [get_bd_intf_pins IoPayloadDoneCountPipe/M_AXIS] [get_bd_intf_pins payloadWriteKernel_0/IoPayloadDoneCountPipe]
   connect_bd_intf_net -intf_net IoPayloadFieldPipe_M_AXIS [get_bd_intf_pins IoPayloadFieldPipe/M_AXIS] [get_bd_intf_pins fieldMatchFixOverflo_0/PayloadInPipe]
   connect_bd_intf_net -intf_net IoPayloadFinalPipe_M_AXIS [get_bd_intf_pins IoPayloadFinalPipe/M_AXIS] [get_bd_intf_pins payloadSourceKernel_0/PayloadInPipe]
   connect_bd_intf_net -intf_net IoPayloadMergedPipe_M_AXIS [get_bd_intf_pins IoPayloadMergedPipe/M_AXIS] [get_bd_intf_pins fieldMatchKernel_0/PayloadInPipe]
   connect_bd_intf_net -intf_net IoPayloadPipe_M_AXIS [get_bd_intf_pins IoPayloadPipe/M_AXIS] [get_bd_intf_pins mergePipesKernel_0/PayloadInPipe]
   connect_bd_intf_net -intf_net IoPayloadSplitPipe_M_AXIS [get_bd_intf_pins IoPayloadSplitPipe/M_AXIS] [get_bd_intf_pins mergePipesKernel_0/PayloadInSplitPipe]
   connect_bd_intf_net -intf_net IoResultCountPipe_M_AXIS [get_bd_intf_pins IoResultCountPipe/M_AXIS] [get_bd_intf_pins doneCountKernel_0/IoResultCountPipe]
+  connect_bd_intf_net -intf_net MetaOutPipe_M_AXIS [get_bd_intf_pins HostMetaPipe/M_AXIS] [get_bd_intf_pins resultSinkKernel_0/RidMetaInPipe]
+  connect_bd_intf_net -intf_net PayloadSinkPipe_M_AXIS [get_bd_intf_pins HostPayloadPipe/M_AXIS] [get_bd_intf_pins payloadWriteKernel_0/PayloadInPipe]
+  connect_bd_intf_net -intf_net SmForwardPayloadPipe_M_AXIS [get_bd_intf_pins SmForwardPayloadPipe/M_AXIS] [get_bd_intf_pins smSteerPayloadKernel_0/PayloadInPipe]
   connect_bd_intf_net -intf_net SmInputPayloadPipe_M_AXIS [get_bd_intf_pins SmInputPayloadPipe/M_AXIS] [get_bd_intf_pins sm_kernel_0/PayloadInPipe]
-  connect_bd_intf_net -intf_net SmMetaResultPipe_M_AXIS [get_bd_intf_pins SmMetaResultPipe/M_AXIS] [get_bd_intf_pins resultSinkKernel_0/SmResultMetaPipe]
+  connect_bd_intf_net -intf_net SmMetaResultPipe_M_AXIS [get_bd_intf_pins SmMetaResultPipe/M_AXIS] [get_bd_intf_pins smSteerPayloadKernel_0/RidMetaInPipe]
+  connect_bd_intf_net -intf_net SmSafePayloadPipe_M_AXIS [get_bd_intf_pins SmSafePayloadPipe/M_AXIS] [get_bd_intf_pins doneCountKernel_0/SmPayloadSafePipe]
   connect_bd_intf_net -intf_net doneCountKernel_0_IoDoneCountPipe [get_bd_intf_pins doneCountKernel_0/IoDoneCountPipe] [get_bd_intf_pins IoDoneCountPipe/S_AXIS]
+  connect_bd_intf_net -intf_net doneCountKernel_0_IoPayloadDoneCountPipe [get_bd_intf_pins doneCountKernel_0/IoPayloadDoneCountPipe] [get_bd_intf_pins IoPayloadDoneCountPipe/S_AXIS]
   connect_bd_intf_net -intf_net fieldMatchFixOverflo_0_PayloadOutPipe [get_bd_intf_pins fieldMatchFixOverflo_0/PayloadOutPipe] [get_bd_intf_pins IoPayloadFinalPipe/S_AXIS]
   connect_bd_intf_net -intf_net fieldMatchKernel_0_PayloadOutPipe [get_bd_intf_pins fieldMatchKernel_0/PayloadOutPipe] [get_bd_intf_pins IoPayloadFieldPipe/S_AXIS]
   connect_bd_intf_net -intf_net mergePipesKernel_0_PayloadOutPipe [get_bd_intf_pins mergePipesKernel_0/PayloadOutPipe] [get_bd_intf_pins IoPayloadMergedPipe/S_AXIS]
   connect_bd_intf_net -intf_net payloadReadKernel_0_IoInCountPipe [get_bd_intf_pins payloadReadKernel_0/IoInCountPipe] [get_bd_intf_pins IoInCountPipe/S_AXIS]
   connect_bd_intf_net -intf_net payloadReadKernel_0_PayloadOutPipe [get_bd_intf_pins payloadReadKernel_0/PayloadOutPipe] [get_bd_intf_pins IoPayloadPipe/S_AXIS]
   connect_bd_intf_net -intf_net payloadReadKernel_0_PayloadOutSplitPipe [get_bd_intf_pins payloadReadKernel_0/PayloadOutSplitPipe] [get_bd_intf_pins IoPayloadSplitPipe/S_AXIS]
+  connect_bd_intf_net -intf_net payloadSourceKernel_0_PayloadForwardPipe [get_bd_intf_pins payloadSourceKernel_0/PayloadForwardPipe] [get_bd_intf_pins SmForwardPayloadPipe/S_AXIS]
   connect_bd_intf_net -intf_net payloadSourceKernel_0_PayloadOutPipe [get_bd_intf_pins payloadSourceKernel_0/PayloadOutPipe] [get_bd_intf_pins SmInputPayloadPipe/S_AXIS]
+  connect_bd_intf_net -intf_net payloadWriteKernel_0_IoPayloadCountPipe [get_bd_intf_pins payloadWriteKernel_0/IoPayloadCountPipe] [get_bd_intf_pins IoPayloadCountPipe/S_AXIS]
   connect_bd_intf_net -intf_net resultSinkKernel_0_IoBurstWritePipe [get_bd_intf_pins resultSinkKernel_0/IoBurstWritePipe] [get_bd_intf_pins IoBurstWritePipe/S_AXIS]
   connect_bd_intf_net -intf_net resultSinkKernel_0_IoResultCountPipe [get_bd_intf_pins resultSinkKernel_0/IoResultCountPipe] [get_bd_intf_pins IoResultCountPipe/S_AXIS]
   connect_bd_intf_net -intf_net resultWriteKernel_0_m_axi_gmem0 [get_bd_intf_pins m_axi_gmem0] [get_bd_intf_pins resultWriteKernel_0/m_axi_gmem0]
   connect_bd_intf_net -intf_net s_axi_control1_1 [get_bd_intf_pins s_axi_control1] [get_bd_intf_pins resultWriteKernel_0/s_axi_control]
+  connect_bd_intf_net -intf_net smSteerPayloadKernel_0_PayloadMatchPipe [get_bd_intf_pins smSteerPayloadKernel_0/PayloadMatchPipe] [get_bd_intf_pins PayloadSinkPipe/S_AXIS]
+  connect_bd_intf_net -intf_net smSteerPayloadKernel_0_PayloadSafePipe [get_bd_intf_pins smSteerPayloadKernel_0/PayloadSafePipe] [get_bd_intf_pins SmSafePayloadPipe/S_AXIS]
+  connect_bd_intf_net -intf_net smSteerPayloadKernel_0_RidMetaOutPipe [get_bd_intf_pins smSteerPayloadKernel_0/RidMetaOutPipe] [get_bd_intf_pins MetaOutPipe/S_AXIS]
   connect_bd_intf_net -intf_net sm_kernel_0_ResultOutPipe [get_bd_intf_pins sm_kernel_0/ResultOutPipe] [get_bd_intf_pins SmMetaResultPipe/S_AXIS]
 
   # Create port connections
@@ -390,14 +447,22 @@ proc create_hier_cell_RapidDetect { parentCell nameHier } {
   [get_bd_pins IoPayloadMergedPipe/s_axis_aclk] \
   [get_bd_pins IoPayloadFieldPipe/s_axis_aclk] \
   [get_bd_pins IoPayloadFinalPipe/s_axis_aclk] \
+  [get_bd_pins IoPayloadCountPipe/s_axis_aclk] \
+  [get_bd_pins IoPayloadDoneCountPipe/s_axis_aclk] \
+  [get_bd_pins HostMetaPipe/s_axis_aclk] \
+  [get_bd_pins HostPayloadPipe/s_axis_aclk] \
+  [get_bd_pins SmForwardPayloadPipe/s_axis_aclk] \
+  [get_bd_pins SmSafePayloadPipe/s_axis_aclk] \
   [get_bd_pins doneCountKernel_0/ap_clk] \
   [get_bd_pins fieldMatchFixOverflo_0/ap_clk] \
   [get_bd_pins fieldMatchKernel_0/ap_clk] \
   [get_bd_pins mergePipesKernel_0/ap_clk] \
   [get_bd_pins payloadReadKernel_0/ap_clk] \
   [get_bd_pins payloadSourceKernel_0/ap_clk] \
+  [get_bd_pins payloadWriteKernel_0/ap_clk] \
   [get_bd_pins resultSinkKernel_0/ap_clk] \
   [get_bd_pins resultWriteKernel_0/ap_clk] \
+  [get_bd_pins smSteerPayloadKernel_0/ap_clk] \
   [get_bd_pins sm_kernel_0/ap_clk]
   connect_bd_net -net ap_rst_n_1  [get_bd_pins ap_rst_n] \
   [get_bd_pins IoInCountPipe/s_axis_aresetn] \
@@ -420,6 +485,15 @@ proc create_hier_cell_RapidDetect { parentCell nameHier } {
   [get_bd_pins resultSinkKernel_0/ap_rst_n] \
   [get_bd_pins resultWriteKernel_0/ap_rst_n] \
   [get_bd_pins sm_kernel_0/ap_rst_n]
+  connect_bd_net -net s_axis_aresetn_1  [get_bd_pins s_axis_aresetn] \
+  [get_bd_pins IoPayloadCountPipe/s_axis_aresetn] \
+  [get_bd_pins IoPayloadDoneCountPipe/s_axis_aresetn] \
+  [get_bd_pins HostMetaPipe/s_axis_aresetn] \
+  [get_bd_pins HostPayloadPipe/s_axis_aresetn] \
+  [get_bd_pins SmForwardPayloadPipe/s_axis_aresetn] \
+  [get_bd_pins SmSafePayloadPipe/s_axis_aresetn] \
+  [get_bd_pins payloadWriteKernel_0/ap_rst_n] \
+  [get_bd_pins smSteerPayloadKernel_0/ap_rst_n]
 
   # Restore current instance
   current_bd_instance $oldCurInst
@@ -1209,12 +1283,12 @@ proc create_root_design { parentCell } {
     CONFIG.NUM_MI {0} \
     CONFIG.NUM_NMI {0} \
     CONFIG.NUM_NSI {2} \
-    CONFIG.NUM_SI {1} \
+    CONFIG.NUM_SI {2} \
   ] $axi_noc_mc_ddr4_1
 
 
   set_property -dict [ list \
-   CONFIG.CONNECTIONS {MC_0 {read_bw {500} write_bw {500} read_avg_burst {4} write_avg_burst {4}}} \
+   CONFIG.CONNECTIONS {MC_2 {read_bw {500} write_bw {500} read_avg_burst {4} write_avg_burst {4}}} \
    CONFIG.NOC_PARAMS {} \
    CONFIG.CATEGORY {pl} \
  ] [get_bd_intf_pins /axi_noc_mc_ddr4_1/S00_AXI]
@@ -1224,11 +1298,17 @@ proc create_root_design { parentCell } {
  ] [get_bd_intf_pins /axi_noc_mc_ddr4_1/S00_INI]
 
   set_property -dict [ list \
+   CONFIG.CONNECTIONS {MC_3 {read_bw {1} write_bw {8000} read_avg_burst {4} write_avg_burst {4}}} \
+   CONFIG.NOC_PARAMS {} \
+   CONFIG.CATEGORY {pl} \
+ ] [get_bd_intf_pins /axi_noc_mc_ddr4_1/S01_AXI]
+
+  set_property -dict [ list \
    CONFIG.CONNECTIONS {MC_1 {read_bw {800} write_bw {800} read_avg_burst {64} write_avg_burst {64} initial_boot {false}}} \
  ] [get_bd_intf_pins /axi_noc_mc_ddr4_1/S01_INI]
 
   set_property -dict [ list \
-   CONFIG.ASSOCIATED_BUSIF {S00_AXI} \
+   CONFIG.ASSOCIATED_BUSIF {S00_AXI:S01_AXI} \
  ] [get_bd_pins /axi_noc_mc_ddr4_1/aclk0]
 
   # Create instance: base_logic
@@ -1249,7 +1329,7 @@ proc create_root_design { parentCell } {
   set smartconnect_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:smartconnect:1.0 smartconnect_0 ]
   set_property -dict [list \
     CONFIG.NUM_CLKS {1} \
-    CONFIG.NUM_MI {4} \
+    CONFIG.NUM_MI {5} \
     CONFIG.NUM_SI {1} \
   ] $smartconnect_0
 
@@ -1312,6 +1392,7 @@ proc create_root_design { parentCell } {
 
   # Create interface connections
   connect_bd_intf_net -intf_net RapidDetect_m_axi_gmem0 [get_bd_intf_pins RapidDetect/m_axi_gmem0] [get_bd_intf_pins axi_noc_mc_ddr4_1/S00_AXI]
+  connect_bd_intf_net -intf_net RapidDetect_m_axi_gmem1 [get_bd_intf_pins axi_noc_mc_ddr4_1/S01_AXI] [get_bd_intf_pins RapidDetect/m_axi_gmem1]
   connect_bd_intf_net -intf_net RapidDetect_m_axi_gmem2 [get_bd_intf_pins RapidDetect/m_axi_gmem2] [get_bd_intf_pins axi_noc_0/HBM00_AXI]
   connect_bd_intf_net -intf_net RapidDetect_m_axi_gmem3 [get_bd_intf_pins RapidDetect/m_axi_gmem3] [get_bd_intf_pins axi_noc_0/HBM01_AXI]
   connect_bd_intf_net -intf_net axi_bram_ctrl_0_BRAM_PORTA [get_bd_intf_pins axi_bram_ctrl_0_bram/BRAM_PORTA] [get_bd_intf_pins axi_bram_ctrl_0/BRAM_PORTA]
@@ -1342,6 +1423,7 @@ proc create_root_design { parentCell } {
   connect_bd_intf_net -intf_net smartconnect_0_M01_AXI [get_bd_intf_pins smartconnect_0/M01_AXI] [get_bd_intf_pins RapidDetect/s_axi_control]
   connect_bd_intf_net -intf_net smartconnect_0_M02_AXI [get_bd_intf_pins smartconnect_0/M02_AXI] [get_bd_intf_pins RapidDetect/s_axi_control1]
   connect_bd_intf_net -intf_net smartconnect_0_M03_AXI [get_bd_intf_pins smartconnect_0/M03_AXI] [get_bd_intf_pins axi_gpio_0/S_AXI]
+  connect_bd_intf_net -intf_net smartconnect_0_M04_AXI [get_bd_intf_pins smartconnect_0/M04_AXI] [get_bd_intf_pins RapidDetect/s_axi_control2]
   connect_bd_intf_net -intf_net sys_clk0_0_1 [get_bd_intf_ports sys_clk0_0] [get_bd_intf_pins axi_noc_mc_ddr4_0/sys_clk0]
   connect_bd_intf_net -intf_net sys_clk0_1_1 [get_bd_intf_ports sys_clk0_1] [get_bd_intf_pins axi_noc_mc_ddr4_1/sys_clk0]
 
@@ -1399,6 +1481,8 @@ proc create_root_design { parentCell } {
   [get_bd_pins smartconnect_0/aresetn]
   connect_bd_net -net proc_sys_reset_0_interconnect_aresetn  [get_bd_pins proc_sys_reset_0/interconnect_aresetn] \
   [get_bd_pins axi_gpio_0/s_axi_aresetn]
+  connect_bd_net -net proc_sys_reset_0_peripheral_aresetn  [get_bd_pins proc_sys_reset_0/peripheral_aresetn] \
+  [get_bd_pins RapidDetect/s_axis_aresetn]
 
   # Create address segments
   assign_bd_address -offset 0x020200000000 -range 0x00002000 -target_address_space [get_bd_addr_spaces cips/CPM_PCIE_NOC_0] [get_bd_addr_segs axi_bram_ctrl_0/S_AXI/Mem0] -force
@@ -1440,6 +1524,7 @@ proc create_root_design { parentCell } {
   assign_bd_address -offset 0x020101010000 -range 0x00001000 -target_address_space [get_bd_addr_spaces cips/CPM_PCIE_NOC_0] [get_bd_addr_segs base_logic/gcq_m2r/S00_AXI/S00_AXI_Reg] -force
   assign_bd_address -offset 0x020101000000 -range 0x00001000 -target_address_space [get_bd_addr_spaces cips/CPM_PCIE_NOC_0] [get_bd_addr_segs base_logic/hw_discovery/s_axi_ctrl_pf0/reg0] -force
   assign_bd_address -offset 0x020200002400 -range 0x00000400 -target_address_space [get_bd_addr_spaces cips/CPM_PCIE_NOC_0] [get_bd_addr_segs RapidDetect/payloadReadKernel_0/s_axi_control/Reg] -force
+  assign_bd_address -offset 0x020200003000 -range 0x00000400 -target_address_space [get_bd_addr_spaces cips/CPM_PCIE_NOC_0] [get_bd_addr_segs RapidDetect/payloadWriteKernel_0/s_axi_control/Reg] -force
   assign_bd_address -offset 0x020101040000 -range 0x00001000 -target_address_space [get_bd_addr_spaces cips/CPM_PCIE_NOC_0] [get_bd_addr_segs clock_reset/pcie_mgmt_pdi_reset/pcie_mgmt_pdi_reset_gpio/S_AXI/Reg] -force
   assign_bd_address -offset 0x020200002800 -range 0x00000400 -target_address_space [get_bd_addr_spaces cips/CPM_PCIE_NOC_0] [get_bd_addr_segs RapidDetect/resultWriteKernel_0/s_axi_control/Reg] -force
   assign_bd_address -offset 0x020101001000 -range 0x00001000 -target_address_space [get_bd_addr_spaces cips/CPM_PCIE_NOC_0] [get_bd_addr_segs base_logic/uuid_rom/S_AXI/reg0] -force
@@ -1483,6 +1568,7 @@ proc create_root_design { parentCell } {
   assign_bd_address -offset 0x020101010000 -range 0x00001000 -target_address_space [get_bd_addr_spaces cips/CPM_PCIE_NOC_1] [get_bd_addr_segs base_logic/gcq_m2r/S00_AXI/S00_AXI_Reg] -force
   assign_bd_address -offset 0x020101000000 -range 0x00001000 -target_address_space [get_bd_addr_spaces cips/CPM_PCIE_NOC_1] [get_bd_addr_segs base_logic/hw_discovery/s_axi_ctrl_pf0/reg0] -force
   assign_bd_address -offset 0x020200002400 -range 0x00000400 -target_address_space [get_bd_addr_spaces cips/CPM_PCIE_NOC_1] [get_bd_addr_segs RapidDetect/payloadReadKernel_0/s_axi_control/Reg] -force
+  assign_bd_address -offset 0x020200003000 -range 0x00000400 -target_address_space [get_bd_addr_spaces cips/CPM_PCIE_NOC_1] [get_bd_addr_segs RapidDetect/payloadWriteKernel_0/s_axi_control/Reg] -force
   assign_bd_address -offset 0x020101040000 -range 0x00001000 -target_address_space [get_bd_addr_spaces cips/CPM_PCIE_NOC_1] [get_bd_addr_segs clock_reset/pcie_mgmt_pdi_reset/pcie_mgmt_pdi_reset_gpio/S_AXI/Reg] -force
   assign_bd_address -offset 0x020200002800 -range 0x00000400 -target_address_space [get_bd_addr_spaces cips/CPM_PCIE_NOC_1] [get_bd_addr_segs RapidDetect/resultWriteKernel_0/s_axi_control/Reg] -force
   assign_bd_address -offset 0x020101001000 -range 0x00001000 -target_address_space [get_bd_addr_spaces cips/CPM_PCIE_NOC_1] [get_bd_addr_segs base_logic/uuid_rom/S_AXI/reg0] -force
@@ -1524,7 +1610,8 @@ proc create_root_design { parentCell } {
   assign_bd_address -offset 0x004440000000 -range 0x40000000 -target_address_space [get_bd_addr_spaces RapidDetect/payloadReadKernel_0/Data_m_axi_gmem1] [get_bd_addr_segs axi_noc_0/HBM01_AXI/HBM8_PC1] -force
   assign_bd_address -offset 0x004480000000 -range 0x40000000 -target_address_space [get_bd_addr_spaces RapidDetect/payloadReadKernel_0/Data_m_axi_gmem1] [get_bd_addr_segs axi_noc_0/HBM01_AXI/HBM9_PC0] -force
   assign_bd_address -offset 0x0044C0000000 -range 0x40000000 -target_address_space [get_bd_addr_spaces RapidDetect/payloadReadKernel_0/Data_m_axi_gmem1] [get_bd_addr_segs axi_noc_0/HBM01_AXI/HBM9_PC1] -force
-  assign_bd_address -offset 0x060000000000 -range 0x000800000000 -target_address_space [get_bd_addr_spaces RapidDetect/resultWriteKernel_0/Data_m_axi_gmem0] [get_bd_addr_segs axi_noc_mc_ddr4_1/S00_AXI/C0_DDR_CH2] -force
+  assign_bd_address -offset 0x060000000000 -range 0x000800000000 -target_address_space [get_bd_addr_spaces RapidDetect/resultWriteKernel_0/Data_m_axi_gmem0] [get_bd_addr_segs axi_noc_mc_ddr4_1/S00_AXI/C2_DDR_CH2] -force
+  assign_bd_address -offset 0x060000000000 -range 0x000800000000 -target_address_space [get_bd_addr_spaces RapidDetect/payloadWriteKernel_0/Data_m_axi_gmem0] [get_bd_addr_segs axi_noc_mc_ddr4_1/S01_AXI/C3_DDR_CH2] -force
 
   # Exclude Address Segments
   exclude_bd_addr_seg -target_address_space [get_bd_addr_spaces cips/CPM_PCIE_NOC_0] [get_bd_addr_segs axi_noc_mc_ddr4_0/S00_INI/C0_DDR_CH1]

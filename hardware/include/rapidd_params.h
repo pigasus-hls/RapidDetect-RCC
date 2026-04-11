@@ -25,11 +25,22 @@ SOFTWARE.
 
 #pragma once
 
-/// NOT USED RIGHT NOW. FOR FUTURE EXPANSION
+#ifndef SKIP_RULES_WRITE
+#define SKIP_RULES_WRITE (0)
+#endif
 
+#ifndef SKIP_PAYLOAD_WRITE
+#define SKIP_PAYLOAD_WRITE (0)
+#endif
+
+/// NOT USED RIGHT NOW. FOR FUTURE EXPANSION
 #ifndef SM_ONLY
-#define SM_ONLY (0)
+#define SM_ONLY (1)
 #endif
 
 #include <iostream>
-[[maybe_unused]] static void rapiddPrintParameters() { std::cout << "SM_ONLY = " << SM_ONLY << "\n"; }
+[[maybe_unused]] static void rapiddPrintParameters() {
+  std::cout << "SM_ONLY = " << SM_ONLY << "\n";
+  std::cout << "SKIP_RULES_WRITE = " << SKIP_RULES_WRITE << "\n";
+  std::cout << "SKIP_PAYLOAD_WRITE = " << SKIP_PAYLOAD_WRITE << "\n";
+}

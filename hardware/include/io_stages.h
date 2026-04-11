@@ -34,14 +34,17 @@ SOFTWARE.
 #include <io_types.h>
 #include <sm.h>
 
-// Aligned read data struct; multiple words per flit; multiple flits per read.
-struct PayloadWordPack {
-  PAYLOAD_WORD word[MSPM_UNROLL];
-  BOOL eop;
-  BOOL switchPipe;
-  FTAG ftag[MSPM_UNROLL];  // field tag for each word
-  BOOL hasQuote;
-};
+#if SM_ONLY
+using HostMetaFlit = SmResultMetaFlit;
+#else
+#error Not Implemented
+#endif
+
+#if SM_ONLY
+using HostPayloadFlit = MspmPayloadFlit;
+#else
+#error Not Implemented
+#endif
 
 // Kernel to read from memory, parse endlines to create packets and write to pipes to feed the streaming design
 void payloadReadKernel(RawPayloadPack *testpattern_device_0, RawPayloadPack *testpattern_device_1,
@@ -54,15 +57,8 @@ void mergePipesKernel(hls::stream<PayloadWordPack> &PayloadInPipe, hls::stream<P
                       hls::stream<PayloadWordPack> &PayloadOutPipe);
 
 // Combine payload and mark streams into packet payload stream to feed MSPM injestion pipe
-void payloadSourceKernel(hls::stream<PayloadWordPack> &PayloadInPipe, hls::stream<MspmPayloadFlit> &PayloadOutPipe);
-
-// Parse JSON formatted input packets to tag the values with their corresponding field type
-void fieldMatchKernel(hls::stream<PayloadWordPack> &PayloadInPipe, hls::stream<PayloadWordPack> &PayloadOutPipe);
-
-// One JSON entry might be larger than the maximum payload flit size, so this kernel progagtes the field tags across
-// multiple flits
-void fieldMatchFixOverflowKernel(hls::stream<PayloadWordPack> &PayloadInPipe,
-                                 hls::stream<PayloadWordPack> &PayloadOutPipe);
+void payloadSourceKernel(hls::stream<PayloadWordPack> &PayloadInPipe, hls::stream<MspmPayloadFlit> &PayloadOutPipe,
+                         hls::stream<MspmPayloadFlit> &PayloadForwardPipe);
 
 // resultWriteKernel writes to DRAM trace buffer at a multiple of detection pipeline output width. 64/byte per cycle
 // (costly) is optimal when bandwidth pressure demands it.
@@ -70,9 +66,15 @@ void resultWriteKernel(RidBcntPack *trace_device, BOOL skipWrite, UINT buffer_si
                        hls::stream<RidBcntFlit> &IoBurstWritePipe);
 
 // Format detection pipeline result for writing to DRAM
-void resultSinkKernel(hls::stream<SmResultMetaFlit> &SmResultMetaPipe, hls::stream<RidBcntFlit> &IoBurstWritePipe,
+void resultSinkKernel(hls::stream<HostMetaFlit> &RidMetaInPipe, hls::stream<RidBcntFlit> &IoBurstWritePipe,
                       hls::stream<BOOL> &IoDoneCountPipe, hls::stream<BOOL> &IoResultCountPipe);
+
+// Write payload output from the pipeline to DRAM to send to host
+void payloadWriteKernel(PayloadWritePack *payload_sink_device, UINT count, BOOL skipWrite, UINT max_size,
+                        hls::stream<HostPayloadFlit> &PayloadInPipe, hls::stream<BOOL> &IoPayloadCountPipe,
+                        hls::stream<BOOL> &IoPayloadDoneCountPipe);
 
 // Done count kernel to detect end of processing
 void doneCountKernel(hls::stream<BOOL> &IoInCountPipe, hls::stream<BOOL> &IoResultCountPipe,
-                     hls::stream<BOOL> &IoDoneCountPipe);
+                     hls::stream<BOOL> &IoPayloadCountPipe, hls::stream<MspmPayloadFlit> &SmPayloadSafePipe,
+                     hls::stream<BOOL> &IoDoneCountPipe, hls::stream<BOOL> &IoPayloadDoneCountPipe);

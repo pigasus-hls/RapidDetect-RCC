@@ -35,7 +35,7 @@ FPGA = 'xcv80-lsva4737-2MHP-e-S'
 
 FREQ = 500  # Target frequency for synthesis in MHz
 
-SRC = 'src/io_stages.cpp src/sm.cpp src/mspm/mspm.cpp src/sm_kernel.cpp'
+SRC = 'src/io_stages.cpp src/sm.cpp src/mspm/mspm.cpp src/sm_kernel.cpp src/rapidd_stages.cpp'
 TESTBENCH_SRC = 'src/test/testbench_kernel.cpp'
 TESTBENCH = 'src/test/testbench.cpp src/test/testinit.cpp src/test/main_hls.cpp'
 
@@ -77,7 +77,9 @@ cfg_file.set_value(section='hls', key='syn.top', value='testbench_kernel')  # Se
 
 comp = client.get_component(name='rapidd_testbench')   # Get a handle for the newly created HLS component
 
+csim_log = WORKSPACE + '/rapidd_testbench/rapidd_testbench/logs/hls_run_csim.log'  # Path to the C simulation output log
 print("This can take a few minutes...")
+print("C Simulation log can be found at " + csim_log)  # Inform the user about the duration of the simulation and where to find the log
 sys.stdout = open(os.devnull, 'w')  # Redirect standard output to /dev/null to suppress it
 comp.run(operation='C_SIMULATION')                  # Perform C simulation to verify functionality
 vitis.dispose() # Clean up the Vitis client session
@@ -86,7 +88,6 @@ vitis.dispose() # Clean up the Vitis client session
 sys.stdout = sys.__stdout__
 
 # Diff the output of C simulation against a reference output to check for correctness
-csim_log = WORKSPACE + '/rapidd_testbench/rapidd_testbench/logs/hls_run_csim.log'  # Path to the C simulation output log
 golden_output = './golden/pigsmonly_cs.txt'  # Path to the reference output file for comparison
 
 # Check if there was any error during C simulation by looking for "ERROR" in the log file

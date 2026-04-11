@@ -33,7 +33,7 @@ FPGA = 'xcv80-lsva4737-2MHP-e-S'
 
 FREQ = 550  # Target frequency for synthesis in MHz
 
-SRC = 'src/io_stages.cpp src/sm.cpp src/mspm/mspm.cpp src/sm_kernel.cpp'
+SRC = 'src/io_stages.cpp src/sm.cpp src/mspm/mspm.cpp src/sm_kernel.cpp src/rapidd_stages.cpp'
 TESTBENCH_SRC = 'src/test/testbench_kernel.cpp'
 TESTBENCH = 'src/test/testbench.cpp src/test/testinit.cpp src/test/main_hls.cpp'
 
@@ -82,7 +82,7 @@ script_dir = os.path.dirname(os.path.abspath(__file__))  # Get the absolute path
 client = vitis.create_client()  # Create a Vitis client to interact with the HLS tools
 client.set_workspace(path=WORKSPACE)  # Set the workspace directory to './hls_workspace' for managing HLS components
 
-kernels = ['fieldMatchKernel', 'fieldMatchFixOverflowKernel', 'mergePipesKernel', 'sm_kernel', 'payloadSourceKernel', 'payloadReadKernel', 'resultWriteKernel', 'resultSinkKernel', 'doneCountKernel']
+kernels = ['fieldMatchKernel', 'fieldMatchFixOverflowKernel', 'mergePipesKernel', 'sm_kernel', 'payloadSourceKernel', 'payloadReadKernel', 'resultWriteKernel', 'resultSinkKernel', 'doneCountKernel', 'smSteerPayloadKernel', 'payloadWriteKernel']
 for kernel in kernels:
     create_kernels(client, kernel)  # Create HLS components for each kernel specified in the list
     synthesize_kernel(client, kernel)  # Synthesize each kernel to generate the corresponding hardware description

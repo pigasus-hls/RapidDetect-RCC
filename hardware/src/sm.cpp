@@ -313,7 +313,7 @@ void mspmRecombineWidth(
         if (valid[len]) {
           // register a flagged rule id;
           outRidFlit.payload[len * MSPM_LOOKUP_WIDTH + which] = inRidFlitByLen[len].payload[which];
-          hasHits |= (inRidFlitByLen[len].payload[which].ridPlusOne != 0);
+          hasHits |= inRidFlitByLen[len].hasHits;
         } else {
           outRidFlit.payload[len * MSPM_LOOKUP_WIDTH + which].ridPlusOne = 0;
         }
@@ -493,6 +493,7 @@ void mspmExpandOverloadedRidJoin(hls::stream<SmResultExpBundle> &RidFromForkPipe
         hasHits |= outFlit.payload[which].ridPlusOne != 0;
       }
       if (hasHits || outFlit.eop) {
+        outFlit.hasHits = hasHits;
         RidOutPipe.write(outFlit);
       }
     }
@@ -787,6 +788,7 @@ OUTER_LOOP:
             outFlit.eop = ovFlit.eop;
           }
           if (outFlit.eop || hasHits) {
+            outFlit.hasHits = hasHits;
             RidOutPipe.write(outFlit);
           }
         }

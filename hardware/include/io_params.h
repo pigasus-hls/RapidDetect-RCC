@@ -50,20 +50,20 @@ SOFTWARE.
 // Total number of bytes read per cycle by the payload read kernel
 #define IO_READ_BURSTSZ (IO_READ_BURST * MSPM_UNROLL * MSPM_MASK_WIDTH)
 
-#define IO_RESULT_WIDTH SM_RESULT_WIDTH
-#define PAYLOAD_RESULT_WIDTH MSPM_UNROLL
+#define HOST_RESULT_WIDTH SM_RESULT_WIDTH
+#define HOST_PAYLOAD_WIDTH MSPM_UNROLL
 
 // Width of DRAM write for improved bandwidth
 #ifndef IO_WRITE_MULT
 #define IO_WRITE_MULT (1)
 #endif
-#define IO_WRITE_WIDTH (IO_RESULT_WIDTH * IO_WRITE_MULT)
+#define IO_WRITE_WIDTH (HOST_RESULT_WIDTH * IO_WRITE_MULT)
 
 // NOT USED RIGHT NOW. FOR FUTURE EXPANSION
 #ifndef PAYLOAD_WRITE_MULT
 #define PAYLOAD_WRITE_MULT (1)
 #endif
-#define PAYLOAD_WRITE_WIDTH (PAYLOAD_RESULT_WIDTH * PAYLOAD_WRITE_MULT)
+#define PAYLOAD_WRITE_WIDTH (HOST_PAYLOAD_WIDTH * PAYLOAD_WRITE_MULT)
 
 #include <iostream>
 [[maybe_unused]] static void ioPrintParameters() {

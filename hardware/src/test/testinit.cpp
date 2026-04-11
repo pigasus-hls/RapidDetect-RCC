@@ -192,34 +192,35 @@ UINT loadRawTraceInput(StripedVector<RawPayloadPack, IO_HBM_NUM_CHANNELS,
   datfile.clear();
   datfile.seekg(0);
 
-  traceBuffer.reserve(fileSize / sizeof(RawPayloadPack) + 1024);  // Reserve space for the expected number of packets
+  traceBuffer.reserve(fileSize / IO_READ_BURSTSZ + 1024);  // Reserve space for the expected number of packets
 
   auto start = std::chrono::high_resolution_clock::now();
 
   // Read the raw trace data from the file
   size_t chars_read;
   int idx = 0;
+  char *tempBuffer = new char[1024 * IO_READ_BURSTSZ];
   while (!datfile.eof()) {
     traceBuffer.resize(traceBuffer.size() + 1024);
-    char tempBuffer[1024 * sizeof(RawPayloadPack)];
-    chars_read = datfile.read(tempBuffer, 1024 * sizeof(RawPayloadPack)).gcount();
+    chars_read = datfile.read(tempBuffer, 1024 * IO_READ_BURSTSZ).gcount();
 
     for (size_t i = 0; i < chars_read; i++) {
-      traceBuffer.set(idx, i, (uint8_t)tempBuffer[i]);  // store as char
+      traceBuffer.set(idx + i / IO_READ_BURSTSZ, i % IO_READ_BURSTSZ, (uint8_t)tempBuffer[i]);  // store as char
     }
 
-    idx += chars_read / sizeof(RawPayloadPack);
+    idx += chars_read / IO_READ_BURSTSZ;
   }
-  chars_read = chars_read % sizeof(RawPayloadPack);  // Remaining bytes that do not form a complete RawPayloadPack
+  delete[] tempBuffer;
+  chars_read = chars_read % IO_READ_BURSTSZ;  // Remaining bytes that do not form a complete RawPayloadPack
 
-  for (size_t i = chars_read; i < sizeof(RawPayloadPack); i++) {
+  for (size_t i = chars_read; i < IO_READ_BURSTSZ; i++) {
     traceBuffer.set(idx, i, 0xff);  // Pad remaining bytes with 0xff
   }
 
   traceBuffer.resize((chars_read == 0) ? idx : idx + 1);  // Resize to actual number of packets
 
   // If less than a flit is remaining we need to add an extra burst pack
-  if (chars_read > (sizeof(RawPayloadPack) - (MSPM_UNROLL * MSPM_MASK_WIDTH))) {
+  if (chars_read > (IO_READ_BURSTSZ - (MSPM_UNROLL * MSPM_MASK_WIDTH))) {
     traceBuffer.resize(traceBuffer.size() + 1);
     idx++;
     for (size_t i = 0; i < IO_READ_BURSTSZ; i++) {
