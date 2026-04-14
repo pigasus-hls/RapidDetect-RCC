@@ -36,10 +36,17 @@ SOFTWARE.
  *
  */
 
+// Provide default implementation for copying RID metadata
+template <typename T>
+void copyRidMeta(T &out, const T &in) {
+#pragma HLS INLINE
+  out = in;
+}
+
 // Detects if the input packet has any hits, gobbles empty packets and sends a steering bit per packet for another
 // kernel to steer the payloads to a "match" or "safe" path based on whether there were hits or not
-template <typename TFlit, int numRid, BOOL hasHitsValid>
-void flagger(hls::stream<TFlit> &InPipe, hls::stream<TFlit> &OutPipe, hls::stream<BOOL> &SteerPipe) {
+template <typename TRidInFlit, typename TRidOutFlit, int numRid, BOOL hasHitsValid>
+void flagger(hls::stream<TRidInFlit> &InPipe, hls::stream<TRidOutFlit> &OutPipe, hls::stream<BOOL> &SteerPipe) {
 #pragma HLS INTERFACE mode = ap_ctrl_none port = return
 #pragma HLS INTERFACE mode = axis port = InPipe
 #pragma HLS INTERFACE mode = axis port = OutPipe
@@ -50,8 +57,13 @@ void flagger(hls::stream<TFlit> &InPipe, hls::stream<TFlit> &OutPipe, hls::strea
 
   while (true) {
 #pragma HLS PIPELINE II = 1
-    TFlit inFlit;
+    TRidInFlit inFlit;
+    TRidOutFlit outFlit;
     BOOL valid = InPipe.read_nb(inFlit);
+    for (int i = 0; i < numRid; i++) {
+#pragma HLS UNROLL
+      copyRidMeta(outFlit.payload[i], inFlit.payload[i]);
+    }
 
     eop = inFlit.eop && valid;
     BOOL hasRid = false;
@@ -68,8 +80,10 @@ void flagger(hls::stream<TFlit> &InPipe, hls::stream<TFlit> &OutPipe, hls::strea
         }
       }
     }
+    outFlit.eop = eop;
+    outFlit.hasHits = hasRid;
 
-    if (hasRid || (eop && steeringSent)) OutPipe.write(inFlit);
+    if (hasRid || (eop && steeringSent)) OutPipe.write(outFlit);
     if ((hasRid || eop) && !steeringSent) SteerPipe.write(hasRid);
 
     steeringSent = eop ? false : (steeringSent || hasRid);
@@ -111,6 +125,65 @@ void steerPayload(hls::stream<BOOL> &SteerPipe, hls::stream<TPayload> &InPipe, h
       if (eop) {
         first = true;
       }
+    }
+  }
+}
+
+// Downshifts a wide payload flit into narrower flits, adjusting the eop signal accordingly
+// User must provide the copyPayloadFlit function to specify how the payload should be copied between the types
+template <typename TPayloadInFlit, int TPayloadInUnroll, typename TPayloadOutFlit, int TPayloadOutUnroll>
+void payloadDownshift(hls::stream<TPayloadInFlit> &InPipe, hls::stream<TPayloadOutFlit> &OutPipe) {
+#pragma HLS INTERFACE mode = ap_ctrl_none port = return
+#pragma HLS INTERFACE mode = axis port = InPipe
+#pragma HLS INTERFACE mode = axis port = OutPipe
+
+  uint8_t index = 0;
+  TPayloadInFlit inFlit;
+  BOOL valid = false;
+
+  while (1) {
+#pragma HLS PIPELINE II = 1
+    if (!valid) valid = InPipe.read_nb(inFlit);
+
+    if (valid) {
+      BOOL paddingFlit = true;
+      for (int i = 0; i < TPayloadOutUnroll; i++) {
+#pragma HLS UNROLL
+        for (int j = 0; j < sizeof(PAYLOAD_WORD); j++) {
+#pragma HLS UNROLL
+          // If all bytes in the flit are 0xFF, we consider it as padding and do not send it to output
+          if (((inFlit.word[index * TPayloadOutUnroll + i] >> (j * 8)) & 0xFF) != 0xFF) {
+            paddingFlit = false;
+          }
+        }
+      }
+
+      TPayloadOutFlit outFlit;
+      copyPayloadFlit(outFlit, inFlit, index * TPayloadOutUnroll);
+      index = (index + 1) % (TPayloadInUnroll / TPayloadOutUnroll);
+
+      outFlit.eop = (inFlit.eop && (index == 0));
+      if (!paddingFlit || outFlit.eop) OutPipe.write(outFlit);
+
+      if (index == 0) valid = false;
+    }
+  }
+}
+
+template <typename T>
+void fork(hls::stream<T> &InPipe, hls::stream<T> &OutPipe1, hls::stream<T> &OutPipe2) {
+#pragma HLS INTERFACE mode = ap_ctrl_none port = return
+#pragma HLS INTERFACE mode = axis port = InPipe
+#pragma HLS INTERFACE mode = axis port = OutPipe1
+#pragma HLS INTERFACE mode = axis port = OutPipe2
+
+  while (true) {
+#pragma HLS PIPELINE II = 1
+    T inData;
+    BOOL valid = InPipe.read_nb(inData);
+    if (valid) {
+      OutPipe1.write(inData);
+      OutPipe2.write(inData);
     }
   }
 }

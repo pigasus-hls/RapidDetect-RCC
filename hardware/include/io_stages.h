@@ -33,18 +33,10 @@ SOFTWARE.
 
 #include <io_types.h>
 #include <sm.h>
+#include <nf.h>
 
-#if SM_ONLY
-using HostMetaFlit = SmResultMetaFlit;
-#else
-#error Not Implemented
-#endif
-
-#if SM_ONLY
-using HostPayloadFlit = MspmPayloadFlit;
-#else
-#error Not Implemented
-#endif
+using HostMetaFlit = NfResultMetaFlit;
+using HostPayloadFlit = NfpmPayloadFlit;
 
 // Kernel to read from memory, parse endlines to create packets and write to pipes to feed the streaming design
 void payloadReadKernel(RawPayloadPack *testpattern_device_0, RawPayloadPack *testpattern_device_1,
@@ -77,4 +69,5 @@ void payloadWriteKernel(PayloadWritePack *payload_sink_device, UINT count, BOOL 
 // Done count kernel to detect end of processing
 void doneCountKernel(hls::stream<BOOL> &IoInCountPipe, hls::stream<BOOL> &IoResultCountPipe,
                      hls::stream<BOOL> &IoPayloadCountPipe, hls::stream<MspmPayloadFlit> &SmPayloadSafePipe,
-                     hls::stream<BOOL> &IoDoneCountPipe, hls::stream<BOOL> &IoPayloadDoneCountPipe);
+                     hls::stream<NfpmPayloadFlit> &NfPayloadSafePipe, hls::stream<BOOL> &IoDoneCountPipe,
+                     hls::stream<BOOL> &IoPayloadDoneCountPipe);

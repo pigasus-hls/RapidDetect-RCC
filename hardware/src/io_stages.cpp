@@ -279,16 +279,13 @@ void resultSinkKernel(hls::stream<HostMetaFlit> &RidMetaInPipe, hls::stream<RidB
         for (int which = 0; which < HOST_RESULT_WIDTH; which++) {
 #pragma HLS UNROLL
           wideFlit.ridBcnt[round * HOST_RESULT_WIDTH + which].ridPlusOne = ridPlusOne[which];
-#if MSPM_TRACKSEQ
+#if MSPM_TRACKSEQ && NFPM_TRACKSEQ
           wideFlit.ridBcnt[round * HOST_RESULT_WIDTH + which].bcntSeq = ridFlit.payload[which].seq;
 #else
           wideFlit.ridBcnt[round * HOST_RESULT_WIDTH + which].bcntSeq = now;
 #endif
-#if MSPM_TRACKPOS
+#if MSPM_TRACKPOS && NFPM_TRACKPOS
           wideFlit.ridBcnt[round * HOST_RESULT_WIDTH + which].pos = ridFlit.payload[which].pos;
-#endif
-#if MSPM_CHECKTAG && MSPM_RESOLVE_CONFLICT && !SM_EXPAND_OVERLOADED
-          wideFlit.ridBcnt[round * HOST_RESULT_WIDTH + which].tag = ridFlit.payload[which].tag;
 #endif
         }
         wideFlit.terminate = done;  // signal end of test
@@ -442,12 +439,14 @@ void payloadWriteKernel(PayloadWritePack *payload_sink_device, UINT count, BOOL 
 
 void doneCountKernel(hls::stream<BOOL> &IoInCountPipe, hls::stream<BOOL> &IoResultCountPipe,
                      hls::stream<BOOL> &IoPayloadCountPipe, hls::stream<MspmPayloadFlit> &SmPayloadSafePipe,
-                     hls::stream<BOOL> &IoDoneCountPipe, hls::stream<BOOL> &IoPayloadDoneCountPipe) {
+                     hls::stream<NfpmPayloadFlit> &NfpmPayloadSafePipe, hls::stream<BOOL> &IoDoneCountPipe,
+                     hls::stream<BOOL> &IoPayloadDoneCountPipe) {
 #pragma HLS INTERFACE mode = ap_ctrl_none port = return
 #pragma HLS INTERFACE mode = axis port = IoInCountPipe
 #pragma HLS INTERFACE mode = axis port = IoResultCountPipe
 #pragma HLS INTERFACE mode = axis port = IoPayloadCountPipe
 #pragma HLS INTERFACE mode = axis port = SmPayloadSafePipe
+#pragma HLS INTERFACE mode = axis port = NfpmPayloadSafePipe
 #pragma HLS INTERFACE mode = axis port = IoDoneCountPipe
 #pragma HLS INTERFACE mode = axis port = IoPayloadDoneCountPipe
 
@@ -458,7 +457,8 @@ void doneCountKernel(hls::stream<BOOL> &IoInCountPipe, hls::stream<BOOL> &IoResu
   BOOL inDone = false, inPayloadDone = false;
   BOOL inEop = false;
 
-  BOOL inValid = false, inDoneValid = false, resultValid = false, payloadMatchValid = false, payloadSafeValid = false;
+  BOOL inValid = false, inDoneValid = false, resultValid = false, payloadMatchValid = false, smPayloadSafeValid = false,
+       nfPayloadSafeValid = false;
   while (1) {
 #pragma HLS PIPELINE II = 1
     if (doneCondition) {
@@ -504,21 +504,24 @@ void doneCountKernel(hls::stream<BOOL> &IoInCountPipe, hls::stream<BOOL> &IoResu
     }
 
     BOOL outEop;
-    MspmPayloadFlit safeFlit;
+    MspmPayloadFlit smSafeFlit;
+    NfpmPayloadFlit nfSafeFlit;
     resultValid = IoResultCountPipe.read_nb(outEop);
     payloadMatchValid = IoPayloadCountPipe.read_nb(outEop);
-    payloadSafeValid = SmPayloadSafePipe.read_nb(safeFlit);
+    smPayloadSafeValid = SmPayloadSafePipe.read_nb(smSafeFlit);
+    nfPayloadSafeValid = NfpmPayloadSafePipe.read_nb(nfSafeFlit);
 
     // only count payloads that have completed processing in the pipeline
-    payloadSafeValid = payloadSafeValid && safeFlit.eop;
+    smPayloadSafeValid = smPayloadSafeValid && smSafeFlit.eop;
+    nfPayloadSafeValid = nfPayloadSafeValid && nfSafeFlit.eop;
 
-    outCount += resultValid + payloadSafeValid;
-    outPayloadCount += payloadMatchValid + payloadSafeValid;
+    outCount += resultValid + smPayloadSafeValid + nfPayloadSafeValid;
+    outPayloadCount += payloadMatchValid + smPayloadSafeValid + nfPayloadSafeValid;
 
-    extraOutput = resultValid + payloadSafeValid;
-    payloadExtraOutput = payloadMatchValid + payloadSafeValid;
+    extraOutput = resultValid + smPayloadSafeValid + nfPayloadSafeValid;
+    payloadExtraOutput = payloadMatchValid + smPayloadSafeValid + nfPayloadSafeValid;
 
-    // if (resultValid || payloadSafeValid || payloadMatchValid || inValid) {
+    // if (resultValid || smPayloadSafeValid || nfPayloadSafeValid || payloadMatchValid || inValid) {
     //   std::cout << "Current input count: " << inCountCurrent
     //             << ", Current payload input count: " << inPayloadCountCurrent << ", Current output count: " <<
     //             outCount

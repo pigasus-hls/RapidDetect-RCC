@@ -28,7 +28,7 @@ SOFTWARE.
 #include <utils/pipes.h>
 #include <mspm/mspm_params.h>
 #include <sm_params.h>
-// #include <nfpm-hls/include/nf_params.h>
+#include <nf_params.h>
 #include "rapidd_params.h"
 
 // Number of payload flits must come in multiples of TBBURST which
@@ -50,8 +50,8 @@ SOFTWARE.
 // Total number of bytes read per cycle by the payload read kernel
 #define IO_READ_BURSTSZ (IO_READ_BURST * MSPM_UNROLL * MSPM_MASK_WIDTH)
 
-#define HOST_RESULT_WIDTH SM_RESULT_WIDTH
-#define HOST_PAYLOAD_WIDTH MSPM_UNROLL
+#define HOST_RESULT_WIDTH NF_RESULT_WIDTH
+#define HOST_PAYLOAD_WIDTH NFPM_UNROLL
 
 // Width of DRAM write for improved bandwidth
 #ifndef IO_WRITE_MULT
@@ -67,8 +67,7 @@ SOFTWARE.
 
 #include <iostream>
 [[maybe_unused]] static void ioPrintParameters() {
-  const size_t sizeof_ridBcnt =
-      4 + 2 + ((((MSPM_CHECKTAG && MSPM_RESOLVE_CONFLICT && !SM_EXPAND_OVERLOADED)) || (MSPM_TRACKPOS)) ? 4 : 0);
+  const size_t sizeof_ridBcnt = 4 + 2 + ((MSPM_TRACKPOS && NFPM_TRACKPOS) ? 4 : 0);
   std::cout << "IO_READ_BURST=" << IO_READ_BURST << "\n"
             << "IO_READ_MULT=" << IO_READ_MULT << " (" << (IO_READ_MULT * MSPM_UNROLL * MSPM_MASK_WIDTH) << ")\n"
             << "IO_WRITE_MULT=" << IO_WRITE_MULT << " (" << IO_WRITE_WIDTH * sizeof_ridBcnt << ")\n";

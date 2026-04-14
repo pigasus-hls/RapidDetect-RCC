@@ -40,9 +40,7 @@ SOFTWARE.
 
 #include <mspm/mspm_params.h>
 #include <sm_params.h>
-// #include <mspm/mspm_debug.h>
 #include <utils/types.h>
-#include <utils/pipes.h>
 #include <utils/compactor.h>
 
 #include <mspm/mspm.h>
@@ -76,9 +74,6 @@ template <int NumHits>
 struct MspmHitsFlit {
   BOOL eop;
   BOOL hasHits;
-#if SM_COMBINE_COMPACTOR
-  UIDX channel;  // length of pattern
-#endif
   MspmHashHit payload[NumHits];
 };
 
@@ -98,12 +93,7 @@ using SmNarrowKeyMetaFlit = MspmHitsFlit<MSPM_LOOKUP_WIDTH>;
 
 // Output of Stage 3
 
-/**
- * Primary MSPM Detection Result Type
- *
- * Matches PG stage input format. (Note: result type is fixed at this points. Stage 4 merges multipe by-len stream into
- * 1 stream. Stage 5 reduces stream width. Stage 6 expand overloaded RID.)
- */
+/// Primary MSPM Detection Result Type
 struct SmRidMeta {
   URID ridPlusOne;
 #if MSPM_TRACKSEQ
@@ -118,7 +108,7 @@ struct SmRidMeta {
 #endif
 };
 
-// Auxilary function for use with compactor
+// Auxiliary function for use with compactor
 static inline BOOL isSamePayload(SmRidMeta a, SmRidMeta b) { return ((a).ridPlusOne == (b).ridPlusOne); }
 
 // MSPM output bundle of results

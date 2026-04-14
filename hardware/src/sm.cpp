@@ -225,9 +225,6 @@ MAIN_LOOP:
           hitsFlit[len].payload[pos] = hits[len][pos];
           hasHits[len] |= hits[len][pos].isHit;
         }
-#if SM_COMBINE_COMPACTOR
-        hitsFlit[len].channel = len & 0x7;  // channel is the pattern length
-#endif
         hitsFlit[len].hasHits = hasHits[len];
 
         if (eop) {

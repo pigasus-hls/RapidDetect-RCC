@@ -29,10 +29,7 @@ SOFTWARE.
 
 #include "mspm_params.h"
 #include "sm_tables.h"  // shift-or, bitmap, hash and tag tables
-
-#ifdef __SYNTHESIS__
 #include <ap_int.h>
-#endif
 
 /**
  * MSPM core pattern matching logic functions
@@ -44,11 +41,7 @@ SOFTWARE.
 
 using MSPM_TAG = unsigned char;  // 1-byte hash tag
 
-#ifdef __SYNTHESIS__
 using MSPM_KEY = ap_uint<MSPM_HASH_TABLE0_MAXLGDEPTH>;
-#else
-using MSPM_KEY = unsigned int;  // hash table key 64k is enough
-#endif
 
 #define MSPM_BLANK_MASK (0x0000000000000000)      // length 2~8 encoded only (8 twice)
 #define MSPM_NOHISTORY_MASK (0x0003070f1f3f7fff)  // "no history" mask

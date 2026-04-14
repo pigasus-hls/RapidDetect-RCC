@@ -35,7 +35,7 @@ SOFTWARE.
 
 /// NOT USED RIGHT NOW. FOR FUTURE EXPANSION
 #ifndef SM_ONLY
-#define SM_ONLY (1)
+#define SM_ONLY (0)
 #endif
 
 #include <iostream>

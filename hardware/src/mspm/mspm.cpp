@@ -27,7 +27,6 @@ SOFTWARE.
 #include <stdlib.h>
 
 #include <mspm/mspm_debug.h>
-
 #include <mspm/mspm.h>
 
 void mspmDebugMsg([[maybe_unused]] char *s, [[maybe_unused]] UINT pos, [[maybe_unused]] UINT len,
@@ -192,7 +191,7 @@ SHIFTOR_MASK:
 }
 
 #define MAGIC_NUM ((ULONG)0x0b4e0ef37bc32127)
-#include <mspm/multlookup.h>
+#include <utils/multlookup.h>
 
 // Hyperscan multiply-based hash.  We could do something better in HW.
 static ULONG hsHashFxnSimOnly(ULONG lv, ULONG andmsk, ULONG nBits) {

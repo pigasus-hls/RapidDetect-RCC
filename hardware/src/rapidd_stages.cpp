@@ -50,6 +50,7 @@ FTAG matchField(const char *data) {
   return ftag;
 }
 
+// Parse JSON formatted input packets to tag the values with their corresponding field type
 void fieldMatchKernel(hls::stream<PayloadWordPack> &PayloadInPipe, hls::stream<PayloadWordPack> &PayloadOutPipe) {
 #pragma HLS INTERFACE mode = ap_ctrl_none port = return
 #pragma HLS INTERFACE mode = axis port = PayloadInPipe
@@ -161,6 +162,87 @@ void fieldMatchFixOverflowKernel(hls::stream<PayloadWordPack> &PayloadInPipe,
   }
 }
 
+void fieldTaggerKernel(hls::stream<PayloadWordPack> &PayloadInPipe, hls::stream<PayloadWordPack> &PayloadOutPipe) {
+#pragma HLS INTERFACE mode = ap_ctrl_none port = return
+#pragma HLS INTERFACE mode = axis port = PayloadInPipe
+#pragma HLS INTERFACE mode = axis port = PayloadOutPipe
+
+  hls_thread_local hls::stream<PayloadWordPack, DFLT_PIPE_DEPTH> PayloadPipe("PayloadPipe");
+
+  hls_thread_local hls::task field_match_task(fieldMatchKernel, PayloadInPipe, PayloadPipe);
+  hls_thread_local hls::task field_fix_overflow_task(fieldMatchFixOverflowKernel, PayloadPipe, PayloadOutPipe);
+}
+
+void copyRidMeta(NfRidMeta &dest, SmRidMeta &src) {
+  dest.ridPlusOne = src.ridPlusOne;
+#if MSPM_TRACKSEQ && NFPM_TRACKSEQ
+  dest.seq = src.seq;
+#endif
+#if MSPM_TRACKPOS && NFPM_TRACKPOS
+  dest.pos = src.pos;
+#endif
+  // We don't copy sm payload's tag into nf payload
+}
+
+void copyPayloadFlit(NfpmPayloadFlit &dest, MspmPayloadFlit &src, UINT offset) {
+  for (UIDX j = 0; j < NFPM_UNROLL; j++) {
+#pragma HLS UNROLL
+    dest.word[j] = src.word[j + offset];
+#if NFPM_CHECKFIELD && MSPM_CHECKFIELD
+    dest.ftag[j] = src.ftag[j + offset];
+#endif
+  }
+#if SM_INPKT_SEQ && NF_INPKT_SEQ
+  dest.seq = src.seq;
+#endif
+  dest.sameflow = src.sameflow;
+}
+
+void sm2nfKernel(hls::stream<MspmPayloadFlit> &PayloadInPipe, hls::stream<SmResultMetaFlit> &RidMetaInPipe,
+                 hls::stream<NfpmPayloadFlit> &PayloadOutPipe, hls::stream<NfInputMetaFlit> &RidMetaOutPipe,
+                 hls::stream<MspmPayloadFlit> &PayloadSafePipe, hls::stream<NfpmPayloadFlit> &PayloadForwardPipe) {
+#pragma HLS INTERFACE mode = ap_ctrl_none port = return
+#pragma HLS INTERFACE mode = axis port = PayloadInPipe
+#pragma HLS INTERFACE mode = axis port = RidMetaInPipe
+#pragma HLS INTERFACE mode = axis port = PayloadOutPipe
+#pragma HLS INTERFACE mode = axis port = RidMetaOutPipe
+#pragma HLS INTERFACE mode = axis port = PayloadSafePipe
+#pragma HLS INTERFACE mode = axis port = PayloadForwardPipe
+
+  hls_thread_local hls::stream<BOOL, DFLT_PIPE_DEPTH> SteeringPipe("SteeringPipe");
+  hls_thread_local hls::stream<MspmPayloadFlit, DFLT_PIPE_DEPTH> PayloadMatchPipe("PayloadMatchPipe");
+  hls_thread_local hls::stream<NfpmPayloadFlit, DFLT_PIPE_DEPTH> PayloadDownshiftPipe("PayloadDownshiftPipe");
+
+  hls_thread_local hls::task flagger_task(
+      flagger<SmResultMetaFlit, NfInputMetaFlit, SM_RESULT_WIDTH, (SM_EXPAND_OVERLOADED != 0)>, RidMetaInPipe,
+      RidMetaOutPipe, SteeringPipe);
+  hls_thread_local hls::task steer_payload_task(steerPayload<MspmPayloadFlit>, SteeringPipe, PayloadInPipe,
+                                                PayloadMatchPipe, PayloadSafePipe);
+  hls_thread_local hls::task downshift_payload_task(
+      payloadDownshift<MspmPayloadFlit, MSPM_UNROLL, NfpmPayloadFlit, NFPM_UNROLL>, PayloadMatchPipe,
+      PayloadDownshiftPipe);
+  hls_thread_local hls::task payload_fork_task(fork<NfpmPayloadFlit>, PayloadDownshiftPipe, PayloadOutPipe,
+                                               PayloadForwardPipe);
+}
+
+void nf2hostKernel(hls::stream<NfpmPayloadFlit> &PayloadInPipe, hls::stream<NfResultMetaFlit> &RidMetaInPipe,
+                   hls::stream<NfpmPayloadFlit> &PayloadOutPipe, hls::stream<NfResultMetaFlit> &RidMetaOutPipe,
+                   hls::stream<NfpmPayloadFlit> &PayloadSafePipe) {
+#pragma HLS INTERFACE mode = ap_ctrl_none port = return
+#pragma HLS INTERFACE mode = axis port = PayloadInPipe
+#pragma HLS INTERFACE mode = axis port = RidMetaInPipe
+#pragma HLS INTERFACE mode = axis port = PayloadOutPipe
+#pragma HLS INTERFACE mode = axis port = RidMetaOutPipe
+#pragma HLS INTERFACE mode = axis port = PayloadSafePipe
+
+  hls_thread_local hls::stream<BOOL, DFLT_PIPE_DEPTH> SteeringPipe("SteeringPipe");
+
+  hls_thread_local hls::task flagger_task(flagger<NfResultMetaFlit, NfResultMetaFlit, NF_RESULT_WIDTH, false>,
+                                          RidMetaInPipe, RidMetaOutPipe, SteeringPipe);
+  hls_thread_local hls::task steer_payload_task(steerPayload<NfpmPayloadFlit>, SteeringPipe, PayloadInPipe,
+                                                PayloadOutPipe, PayloadSafePipe);
+}
+
 void smSteerPayloadKernel(hls::stream<MspmPayloadFlit> &PayloadInPipe, hls::stream<SmResultMetaFlit> &RidMetaInPipe,
                           hls::stream<MspmPayloadFlit> &PayloadMatchPipe, hls::stream<MspmPayloadFlit> &PayloadSafePipe,
                           hls::stream<SmResultMetaFlit> &RidMetaOutPipe) {
@@ -173,8 +255,9 @@ void smSteerPayloadKernel(hls::stream<MspmPayloadFlit> &PayloadInPipe, hls::stre
 
   hls_thread_local hls::stream<BOOL, DFLT_PIPE_DEPTH> SteeringPipe("SteeringPipe");
 
-  hls_thread_local hls::task flagger_task(flagger<SmResultMetaFlit, SM_RESULT_WIDTH, (SM_EXPAND_OVERLOADED != 0)>,
-                                          RidMetaInPipe, RidMetaOutPipe, SteeringPipe);
-  hls_thread_local hls::task steerPayload_task(steerPayload<MspmPayloadFlit>, SteeringPipe, PayloadInPipe,
-                                               PayloadMatchPipe, PayloadSafePipe);
+  hls_thread_local hls::task flagger_task(
+      flagger<SmResultMetaFlit, SmResultMetaFlit, SM_RESULT_WIDTH, (SM_EXPAND_OVERLOADED != 0)>, RidMetaInPipe,
+      RidMetaOutPipe, SteeringPipe);
+  hls_thread_local hls::task steer_payload_task(steerPayload<MspmPayloadFlit>, SteeringPipe, PayloadInPipe,
+                                                PayloadMatchPipe, PayloadSafePipe);
 }

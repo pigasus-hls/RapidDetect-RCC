@@ -1,8 +1,8 @@
-# RapidDetect (MSPM) on V80
+# RapidDetect on V80
 
-RapidDetect is an HLS-based 200Gbps (@400MHz) hardware-accelerated threat detection system for streaming, structured system logs using [Sigma](https://github.com/sigmahq/sigma) rules. This repository, prepared for the FCCM 2026 Reconfigurable Computing Challenge, contains the Vitis HLS based implementation of the MSPM-only component of the full RapidDetect FPGA pipeline.
+RapidDetect is an HLS-based 200Gbps (@400MHz) hardware-accelerated threat detection system for streaming, structured system logs using [Sigma](https://github.com/sigmahq/sigma) rules. This repository, prepared for the FCCM 2026 Reconfigurable Computing Challenge, contains the Vitis HLS based implementation of the full RapidDetect FPGA pipeline.
 
-Inspired by [Pigasus Intrustion Prevention/Detection System](https://www.usenix.org/conference/osdi20/presentation/zhao-zhipeng), RapidDetect opts for a heterogeneous FPGA and CPU architecture for high-throughput, low-latency threat detection in streaming system logs. This version of the system is built for the V80 (occupying < 1 out of 3 SLRs) using AVED as a starting point and QDMA to move data and control information between the host and the FPGA. The Multi-String Pattern Matcher is capable of processing upwards of 10,000 string literals at 200Gbps (currently >4000 literals based on the ~200 Linux Sigma rules).
+Inspired by [Pigasus Intrustion Prevention/Detection System](https://www.usenix.org/conference/osdi20/presentation/zhao-zhipeng), RapidDetect opts for a heterogeneous FPGA and CPU architecture for high-throughput, low-latency threat detection in streaming system logs. This version of the system is built for the V80 (occupying < 1 out of 3 SLRs) using AVED as a starting point and QDMA to move data and control information between the host and the FPGA. The Multi-String Pattern Matcher is capable of processing upwards of 10,000 string literals at 200Gbps (currently >4000 literals based on the ~200 Linux Sigma rules). This is followed by the Conjunct Pattern Matcher (CPM) which checks the logs that pass through the MSPM against only the rules that matched in the MSPM. Using a bloom-fliter like fingerprint, the CPM can check for conjunctions (AND) of string literals significantly reducing the false positive rate. 
 
 At a high-level the following diagram captures the system implemented in this repository. HBM is used as a stand-in for future support for streaming inputs directly from the network using ethernet with the FPGA placed as a bump-in-the-wire.
 
@@ -15,7 +15,7 @@ RapidDetect is an ongoing collaboration between [Shashank Obla](https://github.c
 ## Requirements
 
 > [!NOTE]
-> Only Vivado/Vitis are required to run MSPM in C-Simulation mode. Requires Version > 2024.2 for Python scripting support
+> Only Vivado/Vitis are required to run RapidDetect in C-Simulation mode. Requires Version > 2024.2 for Python scripting support
 
 > [!TIP]
 > Make sure the submodule(s) get(s) populated using `git submodule update --init --recursive` after you clone the repo
@@ -90,7 +90,7 @@ vitis -s scripts/rapidd_testbench.py
 
 This will create a `hls_workspace` folder with the Vitis workspace and the testbench. The output of the script should look like
 
-```bash
+```log
 ****** Vitis Development Environment
 ****** Vitis v2025.1 (64-bit)
   **** SW Build 6137779 on 2025-05-21-18:10:04
@@ -98,7 +98,13 @@ This will create a `hls_workspace` folder with the Vitis workspace and the testb
     ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
 
 Vitis Server started on port 'XXXXX'.
-This can take a few minutes...
+
+Running CSim for MSPM only. This can take a few minutes...
+C Simulation log can be found at ./hls_workspace/smonly/smonly/logs/hls_run_csim.log
+C Simulation output matches the golden output. Test PASSED.
+
+Running CSim for full RapidDetect. This can take a few minutes...
+C Simulation log can be found at ./hls_workspace/rapidd/rapidd/logs/hls_run_csim.log
 C Simulation output matches the golden output. Test PASSED.
 ```
 
@@ -182,17 +188,20 @@ Build the host code using make and run it. This will run the built in test on th
 
 ```bash
 make host.x
-./host.x
+sudo ./host.x
 ```
 
 To run a real trace (the provided traces are derived from the [DARPA Transparent Computing Program](https://www.darpa.mil/research/programs/transparent-computing) generated during [Engagement #5](https://github.com/darpa-i2o/transparent-computing)), first unzip the traces in the [traces directory](./traces) and execute the host code as follows:
 
 ```bash
 make -C ../traces
-./host.x ../traces/E5_cadets-deduplicated.json.500k
+sudo ./host.x ../traces/E5_cadets-deduplicated.json.500k
 ```
 
 Expected performance is ~172Gbps (which includes packetization overhead of splitting the log events at newlines).
+
+> [!TIP]
+> Communicating using QDMA by default requires super-user priviledges. But using udev rules, regular users can gain access to the queues directly. Create a new file as `/etc/udev/rules.d/100-v80.rules` with the line: `ACTION=="add", KERNEL=="qdma01001-MM-*", SUBSYSTEM=="qdma-pf", MODE:="666"` (replace the BBDDF number with the number for the V80 on your machine). This will set the permissions for the queues to 666 when they're created and the host code can be run without sudo.
 
 #### Running with Hyperscan
 
@@ -209,10 +218,10 @@ Open two terminals, one to run the producer and one for the consumer. With the F
 
 ```bash
 # Terminal 1 (run first)
-./host_producer ../traces/E5_cadets-deduplicated.json.500k <num_threads>
+sudo ./host_producer ../traces/E5_cadets-deduplicated.json.500k <num_threads>
 
 # Terminal 2 (looks for the shared memory region created by the producer)
-./hyperscan_consumer patterns_full.db <num_threads>
+sudo ./hyperscan_consumer patterns_full.db <num_threads>
 ```
 
 You should see a new file [all_detections.log](./software/all_detections.log) which contains the subset of events that passed through both the FPGA and Hyperscan and are flagged as malicious by RapidDetect. The performance of this implementation needs to be tuned to a new machine setup and you might not see the full bandwidth if you do not have enough cores (for this given trace you might need upwards of 24 cores for Hyperscan to handle the rate coming from the FPGA).

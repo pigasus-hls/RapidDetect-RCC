@@ -84,10 +84,11 @@ xilinx.com:hls:resultSinkKernel:1.0\
 xilinx.com:ip:axis_data_fifo:2.0\
 xilinx.com:hls:resultWriteKernel:1.0\
 xilinx.com:hls:mergePipesKernel:1.0\
-xilinx.com:hls:fieldMatchKernel:1.0\
-xilinx.com:hls:fieldMatchFixOverflowKernel:1.0\
 xilinx.com:hls:payloadWriteKernel:1.0\
-xilinx.com:hls:smSteerPayloadKernel:1.0\
+xilinx.com:hls:fieldTaggerKernel:1.0\
+xilinx.com:hls:sm2nfKernel:1.0\
+xilinx.com:hls:nf2hostKernel:1.0\
+xilinx.com:hls:nf_kernel:1.0\
 xilinx.com:inline_hdl:ilconcat:1.0\
 xilinx.com:inline_hdl:ilreduced_logic:1.0\
 xilinx.com:inline_hdl:ilvector_logic:1.0\
@@ -339,27 +340,15 @@ proc create_hier_cell_RapidDetect { parentCell nameHier } {
   set_property CONFIG.FIFO_DEPTH {16} $IoPayloadMergedPipe
 
 
-  # Create instance: fieldMatchKernel_0, and set properties
-  set fieldMatchKernel_0 [ create_bd_cell -type ip -vlnv xilinx.com:hls:fieldMatchKernel:1.0 fieldMatchKernel_0 ]
-
-  # Create instance: fieldMatchFixOverflo_0, and set properties
-  set fieldMatchFixOverflo_0 [ create_bd_cell -type ip -vlnv xilinx.com:hls:fieldMatchFixOverflowKernel:1.0 fieldMatchFixOverflo_0 ]
-
   # Create instance: IoPayloadFinalPipe, and set properties
   set IoPayloadFinalPipe [ create_bd_cell -type ip -vlnv xilinx.com:ip:axis_data_fifo:2.0 IoPayloadFinalPipe ]
   set_property CONFIG.FIFO_DEPTH {16} $IoPayloadFinalPipe
 
 
-  # Create instance: IoPayloadFieldPipe, and set properties
-  set IoPayloadFieldPipe [ create_bd_cell -type ip -vlnv xilinx.com:ip:axis_data_fifo:2.0 IoPayloadFieldPipe ]
-  set_property CONFIG.FIFO_DEPTH {16} $IoPayloadFieldPipe
-
-
   # Create instance: payloadWriteKernel_0, and set properties
   set payloadWriteKernel_0 [ create_bd_cell -type ip -vlnv xilinx.com:hls:payloadWriteKernel:1.0 payloadWriteKernel_0 ]
+  set_property CONFIG.C_M_AXI_GMEM0_DATA_WIDTH {128} $payloadWriteKernel_0
 
-  # Create instance: smSteerPayloadKernel_0, and set properties
-  set smSteerPayloadKernel_0 [ create_bd_cell -type ip -vlnv xilinx.com:hls:smSteerPayloadKernel:1.0 smSteerPayloadKernel_0 ]
 
   # Create instance: SmForwardPayloadPipe, and set properties
   set SmForwardPayloadPipe [ create_bd_cell -type ip -vlnv xilinx.com:ip:axis_data_fifo:2.0 SmForwardPayloadPipe ]
@@ -391,6 +380,43 @@ proc create_hier_cell_RapidDetect { parentCell nameHier } {
   set_property CONFIG.FIFO_DEPTH {16} $SmSafePayloadPipe
 
 
+  # Create instance: fieldTaggerKernel_0, and set properties
+  set fieldTaggerKernel_0 [ create_bd_cell -type ip -vlnv xilinx.com:hls:fieldTaggerKernel:1.0 fieldTaggerKernel_0 ]
+
+  # Create instance: sm2nfKernel_0, and set properties
+  set sm2nfKernel_0 [ create_bd_cell -type ip -vlnv xilinx.com:hls:sm2nfKernel:1.0 sm2nfKernel_0 ]
+
+  # Create instance: nf2hostKernel_0, and set properties
+  set nf2hostKernel_0 [ create_bd_cell -type ip -vlnv xilinx.com:hls:nf2hostKernel:1.0 nf2hostKernel_0 ]
+
+  # Create instance: NfSafePayloadPipe, and set properties
+  set NfSafePayloadPipe [ create_bd_cell -type ip -vlnv xilinx.com:ip:axis_data_fifo:2.0 NfSafePayloadPipe ]
+  set_property CONFIG.FIFO_DEPTH {16} $NfSafePayloadPipe
+
+
+  # Create instance: nf_kernel_0, and set properties
+  set nf_kernel_0 [ create_bd_cell -type ip -vlnv xilinx.com:hls:nf_kernel:1.0 nf_kernel_0 ]
+
+  # Create instance: NfForwardPayloadPipe, and set properties
+  set NfForwardPayloadPipe [ create_bd_cell -type ip -vlnv xilinx.com:ip:axis_data_fifo:2.0 NfForwardPayloadPipe ]
+  set_property CONFIG.FIFO_DEPTH {2048} $NfForwardPayloadPipe
+
+
+  # Create instance: NfMetaResultPipe, and set properties
+  set NfMetaResultPipe [ create_bd_cell -type ip -vlnv xilinx.com:ip:axis_data_fifo:2.0 NfMetaResultPipe ]
+  set_property CONFIG.FIFO_DEPTH {16} $NfMetaResultPipe
+
+
+  # Create instance: NfInputPayloadPipe, and set properties
+  set NfInputPayloadPipe [ create_bd_cell -type ip -vlnv xilinx.com:ip:axis_data_fifo:2.0 NfInputPayloadPipe ]
+  set_property CONFIG.FIFO_DEPTH {1024} $NfInputPayloadPipe
+
+
+  # Create instance: NfInputMetaPipe, and set properties
+  set NfInputMetaPipe [ create_bd_cell -type ip -vlnv xilinx.com:ip:axis_data_fifo:2.0 NfInputMetaPipe ]
+  set_property CONFIG.FIFO_DEPTH {1024} $NfInputMetaPipe
+
+
   # Create interface connections
   connect_bd_intf_net -intf_net Conn1 [get_bd_intf_pins payloadReadKernel_0/m_axi_gmem0] [get_bd_intf_pins m_axi_gmem2]
   connect_bd_intf_net -intf_net Conn2 [get_bd_intf_pins payloadReadKernel_0/m_axi_gmem1] [get_bd_intf_pins m_axi_gmem3]
@@ -402,23 +428,30 @@ proc create_hier_cell_RapidDetect { parentCell nameHier } {
   connect_bd_intf_net -intf_net IoInCountPipe_M_AXIS [get_bd_intf_pins IoInCountPipe/M_AXIS] [get_bd_intf_pins doneCountKernel_0/IoInCountPipe]
   connect_bd_intf_net -intf_net IoPayloadCountPipe_M_AXIS [get_bd_intf_pins IoPayloadCountPipe/M_AXIS] [get_bd_intf_pins doneCountKernel_0/IoPayloadCountPipe]
   connect_bd_intf_net -intf_net IoPayloadDoneCountPipe_M_AXIS [get_bd_intf_pins IoPayloadDoneCountPipe/M_AXIS] [get_bd_intf_pins payloadWriteKernel_0/IoPayloadDoneCountPipe]
-  connect_bd_intf_net -intf_net IoPayloadFieldPipe_M_AXIS [get_bd_intf_pins IoPayloadFieldPipe/M_AXIS] [get_bd_intf_pins fieldMatchFixOverflo_0/PayloadInPipe]
   connect_bd_intf_net -intf_net IoPayloadFinalPipe_M_AXIS [get_bd_intf_pins IoPayloadFinalPipe/M_AXIS] [get_bd_intf_pins payloadSourceKernel_0/PayloadInPipe]
-  connect_bd_intf_net -intf_net IoPayloadMergedPipe_M_AXIS [get_bd_intf_pins IoPayloadMergedPipe/M_AXIS] [get_bd_intf_pins fieldMatchKernel_0/PayloadInPipe]
+  connect_bd_intf_net -intf_net IoPayloadMergedPipe_M_AXIS [get_bd_intf_pins IoPayloadMergedPipe/M_AXIS] [get_bd_intf_pins fieldTaggerKernel_0/PayloadInPipe]
   connect_bd_intf_net -intf_net IoPayloadPipe_M_AXIS [get_bd_intf_pins IoPayloadPipe/M_AXIS] [get_bd_intf_pins mergePipesKernel_0/PayloadInPipe]
   connect_bd_intf_net -intf_net IoPayloadSplitPipe_M_AXIS [get_bd_intf_pins IoPayloadSplitPipe/M_AXIS] [get_bd_intf_pins mergePipesKernel_0/PayloadInSplitPipe]
   connect_bd_intf_net -intf_net IoResultCountPipe_M_AXIS [get_bd_intf_pins IoResultCountPipe/M_AXIS] [get_bd_intf_pins doneCountKernel_0/IoResultCountPipe]
   connect_bd_intf_net -intf_net MetaOutPipe_M_AXIS [get_bd_intf_pins HostMetaPipe/M_AXIS] [get_bd_intf_pins resultSinkKernel_0/RidMetaInPipe]
+  connect_bd_intf_net -intf_net NfForwardPayloadPipe_M_AXIS [get_bd_intf_pins NfForwardPayloadPipe/M_AXIS] [get_bd_intf_pins nf2hostKernel_0/PayloadInPipe]
+  connect_bd_intf_net -intf_net NfInputMetaPipe_M_AXIS [get_bd_intf_pins NfInputMetaPipe/M_AXIS] [get_bd_intf_pins nf_kernel_0/RidMetaInPipe]
+  connect_bd_intf_net -intf_net NfInputPayloadPipe_M_AXIS [get_bd_intf_pins NfInputPayloadPipe/M_AXIS] [get_bd_intf_pins nf_kernel_0/PayloadInPipe]
+  connect_bd_intf_net -intf_net NfMetaResultPipe_M_AXIS [get_bd_intf_pins NfMetaResultPipe/M_AXIS] [get_bd_intf_pins nf2hostKernel_0/RidMetaInPipe]
+  connect_bd_intf_net -intf_net NfSafePayloadPipe_M_AXIS [get_bd_intf_pins NfSafePayloadPipe/M_AXIS] [get_bd_intf_pins doneCountKernel_0/NfpmPayloadSafePipe]
   connect_bd_intf_net -intf_net PayloadSinkPipe_M_AXIS [get_bd_intf_pins HostPayloadPipe/M_AXIS] [get_bd_intf_pins payloadWriteKernel_0/PayloadInPipe]
-  connect_bd_intf_net -intf_net SmForwardPayloadPipe_M_AXIS [get_bd_intf_pins SmForwardPayloadPipe/M_AXIS] [get_bd_intf_pins smSteerPayloadKernel_0/PayloadInPipe]
+  connect_bd_intf_net -intf_net SmForwardPayloadPipe_M_AXIS [get_bd_intf_pins SmForwardPayloadPipe/M_AXIS] [get_bd_intf_pins sm2nfKernel_0/PayloadInPipe]
   connect_bd_intf_net -intf_net SmInputPayloadPipe_M_AXIS [get_bd_intf_pins SmInputPayloadPipe/M_AXIS] [get_bd_intf_pins sm_kernel_0/PayloadInPipe]
-  connect_bd_intf_net -intf_net SmMetaResultPipe_M_AXIS [get_bd_intf_pins SmMetaResultPipe/M_AXIS] [get_bd_intf_pins smSteerPayloadKernel_0/RidMetaInPipe]
+  connect_bd_intf_net -intf_net SmMetaResultPipe_M_AXIS [get_bd_intf_pins SmMetaResultPipe/M_AXIS] [get_bd_intf_pins sm2nfKernel_0/RidMetaInPipe]
   connect_bd_intf_net -intf_net SmSafePayloadPipe_M_AXIS [get_bd_intf_pins SmSafePayloadPipe/M_AXIS] [get_bd_intf_pins doneCountKernel_0/SmPayloadSafePipe]
   connect_bd_intf_net -intf_net doneCountKernel_0_IoDoneCountPipe [get_bd_intf_pins doneCountKernel_0/IoDoneCountPipe] [get_bd_intf_pins IoDoneCountPipe/S_AXIS]
   connect_bd_intf_net -intf_net doneCountKernel_0_IoPayloadDoneCountPipe [get_bd_intf_pins doneCountKernel_0/IoPayloadDoneCountPipe] [get_bd_intf_pins IoPayloadDoneCountPipe/S_AXIS]
-  connect_bd_intf_net -intf_net fieldMatchFixOverflo_0_PayloadOutPipe [get_bd_intf_pins fieldMatchFixOverflo_0/PayloadOutPipe] [get_bd_intf_pins IoPayloadFinalPipe/S_AXIS]
-  connect_bd_intf_net -intf_net fieldMatchKernel_0_PayloadOutPipe [get_bd_intf_pins fieldMatchKernel_0/PayloadOutPipe] [get_bd_intf_pins IoPayloadFieldPipe/S_AXIS]
+  connect_bd_intf_net -intf_net fieldTaggerKernel_0_PayloadOutPipe [get_bd_intf_pins fieldTaggerKernel_0/PayloadOutPipe] [get_bd_intf_pins IoPayloadFinalPipe/S_AXIS]
   connect_bd_intf_net -intf_net mergePipesKernel_0_PayloadOutPipe [get_bd_intf_pins mergePipesKernel_0/PayloadOutPipe] [get_bd_intf_pins IoPayloadMergedPipe/S_AXIS]
+  connect_bd_intf_net -intf_net nf2hostKernel_0_PayloadOutPipe [get_bd_intf_pins nf2hostKernel_0/PayloadOutPipe] [get_bd_intf_pins HostPayloadPipe/S_AXIS]
+  connect_bd_intf_net -intf_net nf2hostKernel_0_PayloadSafePipe [get_bd_intf_pins nf2hostKernel_0/PayloadSafePipe] [get_bd_intf_pins NfSafePayloadPipe/S_AXIS]
+  connect_bd_intf_net -intf_net nf2hostKernel_0_RidMetaOutPipe [get_bd_intf_pins nf2hostKernel_0/RidMetaOutPipe] [get_bd_intf_pins HostMetaPipe/S_AXIS]
+  connect_bd_intf_net -intf_net nf_kernel_0_ResultOutPipe [get_bd_intf_pins nf_kernel_0/ResultOutPipe] [get_bd_intf_pins NfMetaResultPipe/S_AXIS]
   connect_bd_intf_net -intf_net payloadReadKernel_0_IoInCountPipe [get_bd_intf_pins payloadReadKernel_0/IoInCountPipe] [get_bd_intf_pins IoInCountPipe/S_AXIS]
   connect_bd_intf_net -intf_net payloadReadKernel_0_PayloadOutPipe [get_bd_intf_pins payloadReadKernel_0/PayloadOutPipe] [get_bd_intf_pins IoPayloadPipe/S_AXIS]
   connect_bd_intf_net -intf_net payloadReadKernel_0_PayloadOutSplitPipe [get_bd_intf_pins payloadReadKernel_0/PayloadOutSplitPipe] [get_bd_intf_pins IoPayloadSplitPipe/S_AXIS]
@@ -429,9 +462,10 @@ proc create_hier_cell_RapidDetect { parentCell nameHier } {
   connect_bd_intf_net -intf_net resultSinkKernel_0_IoResultCountPipe [get_bd_intf_pins resultSinkKernel_0/IoResultCountPipe] [get_bd_intf_pins IoResultCountPipe/S_AXIS]
   connect_bd_intf_net -intf_net resultWriteKernel_0_m_axi_gmem0 [get_bd_intf_pins m_axi_gmem0] [get_bd_intf_pins resultWriteKernel_0/m_axi_gmem0]
   connect_bd_intf_net -intf_net s_axi_control1_1 [get_bd_intf_pins s_axi_control1] [get_bd_intf_pins resultWriteKernel_0/s_axi_control]
-  connect_bd_intf_net -intf_net smSteerPayloadKernel_0_PayloadMatchPipe [get_bd_intf_pins smSteerPayloadKernel_0/PayloadMatchPipe] [get_bd_intf_pins HostPayloadPipe/S_AXIS]
-  connect_bd_intf_net -intf_net smSteerPayloadKernel_0_PayloadSafePipe [get_bd_intf_pins smSteerPayloadKernel_0/PayloadSafePipe] [get_bd_intf_pins SmSafePayloadPipe/S_AXIS]
-  connect_bd_intf_net -intf_net smSteerPayloadKernel_0_RidMetaOutPipe [get_bd_intf_pins smSteerPayloadKernel_0/RidMetaOutPipe] [get_bd_intf_pins HostMetaPipe/S_AXIS]
+  connect_bd_intf_net -intf_net sm2nfKernel_0_PayloadForwardPipe [get_bd_intf_pins sm2nfKernel_0/PayloadForwardPipe] [get_bd_intf_pins NfForwardPayloadPipe/S_AXIS]
+  connect_bd_intf_net -intf_net sm2nfKernel_0_PayloadOutPipe [get_bd_intf_pins sm2nfKernel_0/PayloadOutPipe] [get_bd_intf_pins NfInputPayloadPipe/S_AXIS]
+  connect_bd_intf_net -intf_net sm2nfKernel_0_PayloadSafePipe [get_bd_intf_pins sm2nfKernel_0/PayloadSafePipe] [get_bd_intf_pins SmSafePayloadPipe/S_AXIS]
+  connect_bd_intf_net -intf_net sm2nfKernel_0_RidMetaOutPipe [get_bd_intf_pins sm2nfKernel_0/RidMetaOutPipe] [get_bd_intf_pins NfInputMetaPipe/S_AXIS]
   connect_bd_intf_net -intf_net sm_kernel_0_ResultOutPipe [get_bd_intf_pins sm_kernel_0/ResultOutPipe] [get_bd_intf_pins SmMetaResultPipe/S_AXIS]
 
   # Create port connections
@@ -445,7 +479,6 @@ proc create_hier_cell_RapidDetect { parentCell nameHier } {
   [get_bd_pins SmInputPayloadPipe/s_axis_aclk] \
   [get_bd_pins SmMetaResultPipe/s_axis_aclk] \
   [get_bd_pins IoPayloadMergedPipe/s_axis_aclk] \
-  [get_bd_pins IoPayloadFieldPipe/s_axis_aclk] \
   [get_bd_pins IoPayloadFinalPipe/s_axis_aclk] \
   [get_bd_pins IoPayloadCountPipe/s_axis_aclk] \
   [get_bd_pins IoPayloadDoneCountPipe/s_axis_aclk] \
@@ -454,16 +487,22 @@ proc create_hier_cell_RapidDetect { parentCell nameHier } {
   [get_bd_pins SmForwardPayloadPipe/s_axis_aclk] \
   [get_bd_pins SmSafePayloadPipe/s_axis_aclk] \
   [get_bd_pins doneCountKernel_0/ap_clk] \
-  [get_bd_pins fieldMatchFixOverflo_0/ap_clk] \
-  [get_bd_pins fieldMatchKernel_0/ap_clk] \
   [get_bd_pins mergePipesKernel_0/ap_clk] \
   [get_bd_pins payloadReadKernel_0/ap_clk] \
   [get_bd_pins payloadSourceKernel_0/ap_clk] \
   [get_bd_pins payloadWriteKernel_0/ap_clk] \
   [get_bd_pins resultSinkKernel_0/ap_clk] \
   [get_bd_pins resultWriteKernel_0/ap_clk] \
-  [get_bd_pins smSteerPayloadKernel_0/ap_clk] \
-  [get_bd_pins sm_kernel_0/ap_clk]
+  [get_bd_pins sm_kernel_0/ap_clk] \
+  [get_bd_pins fieldTaggerKernel_0/ap_clk] \
+  [get_bd_pins NfForwardPayloadPipe/s_axis_aclk] \
+  [get_bd_pins NfMetaResultPipe/s_axis_aclk] \
+  [get_bd_pins NfSafePayloadPipe/s_axis_aclk] \
+  [get_bd_pins nf_kernel_0/ap_clk] \
+  [get_bd_pins NfInputPayloadPipe/s_axis_aclk] \
+  [get_bd_pins NfInputMetaPipe/s_axis_aclk] \
+  [get_bd_pins nf2hostKernel_0/ap_clk] \
+  [get_bd_pins sm2nfKernel_0/ap_clk]
   connect_bd_net -net ap_rst_n_1  [get_bd_pins ap_rst_n] \
   [get_bd_pins IoInCountPipe/s_axis_aresetn] \
   [get_bd_pins IoResultCountPipe/s_axis_aresetn] \
@@ -474,11 +513,8 @@ proc create_hier_cell_RapidDetect { parentCell nameHier } {
   [get_bd_pins SmInputPayloadPipe/s_axis_aresetn] \
   [get_bd_pins SmMetaResultPipe/s_axis_aresetn] \
   [get_bd_pins IoPayloadMergedPipe/s_axis_aresetn] \
-  [get_bd_pins IoPayloadFieldPipe/s_axis_aresetn] \
   [get_bd_pins IoPayloadFinalPipe/s_axis_aresetn] \
   [get_bd_pins doneCountKernel_0/ap_rst_n] \
-  [get_bd_pins fieldMatchFixOverflo_0/ap_rst_n] \
-  [get_bd_pins fieldMatchKernel_0/ap_rst_n] \
   [get_bd_pins mergePipesKernel_0/ap_rst_n] \
   [get_bd_pins payloadReadKernel_0/ap_rst_n] \
   [get_bd_pins payloadSourceKernel_0/ap_rst_n] \
@@ -493,7 +529,15 @@ proc create_hier_cell_RapidDetect { parentCell nameHier } {
   [get_bd_pins SmForwardPayloadPipe/s_axis_aresetn] \
   [get_bd_pins SmSafePayloadPipe/s_axis_aresetn] \
   [get_bd_pins payloadWriteKernel_0/ap_rst_n] \
-  [get_bd_pins smSteerPayloadKernel_0/ap_rst_n]
+  [get_bd_pins fieldTaggerKernel_0/ap_rst_n] \
+  [get_bd_pins NfForwardPayloadPipe/s_axis_aresetn] \
+  [get_bd_pins NfMetaResultPipe/s_axis_aresetn] \
+  [get_bd_pins NfSafePayloadPipe/s_axis_aresetn] \
+  [get_bd_pins nf_kernel_0/ap_rst_n] \
+  [get_bd_pins NfInputPayloadPipe/s_axis_aresetn] \
+  [get_bd_pins NfInputMetaPipe/s_axis_aresetn] \
+  [get_bd_pins nf2hostKernel_0/ap_rst_n] \
+  [get_bd_pins sm2nfKernel_0/ap_rst_n]
 
   # Restore current instance
   current_bd_instance $oldCurInst

@@ -57,16 +57,12 @@ SOFTWARE.
 #endif
 #ifndef MSPM_CHECKSEQ
 #define MSPM_CHECKSEQ \
-  (0)  // set to 1 if compactor should fold only
-       // records with the same sequence number;
-       // leave as 0 for faster logic if barrier
-       // is applied in between sequence
+  (0)  // set to 1 if compactor should fold only records with the same sequence number;
+       // leave as 0 for faster logic if barrier is applied in between sequence
 #endif
 
 #ifndef MSPM_TRACKPOS
-#define MSPM_TRACKPOS \
-  (0)  // set 1 to track match position; used with DOFOLDING=false
-       // compaction to not lose track
+#define MSPM_TRACKPOS (0)  // set 1 to track match position; used with DOFOLDING=false compaction to not lose track
 #endif
 
 #ifndef MSPM_LOOKUP_WIDTH

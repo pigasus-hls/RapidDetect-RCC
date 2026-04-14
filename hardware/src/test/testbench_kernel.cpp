@@ -25,6 +25,7 @@ SOFTWARE.
 #include <io_stages.h>
 #include <rapidd_stages.h>
 #include <sm_kernel.h>
+#include <nf_kernel.h>
 #include <test/testbench_kernel.h>
 #include <hls_stream.h>
 #include <hls_task.h>
@@ -46,15 +47,23 @@ void testbench_kernel(RawPayloadPack* testpattern_device_0, RawPayloadPack* test
   hls_thread_local hls::stream<PayloadWordPack, DFLT_PIPE_DEPTH> IoBurstReadPayloadPipe("IoBurstReadPayloadPipe");
   hls_thread_local hls::stream<PayloadWordPack, DFLT_PIPE_DEPTH> IoReadPayloadSplitPipe("IoReadPayloadSplitPipe");
   hls_thread_local hls::stream<PayloadWordPack, DFLT_PIPE_DEPTH> IoReadPayloadMergedPipe("IoReadPayloadMergedPipe");
-  hls_thread_local hls::stream<PayloadWordPack, DFLT_PIPE_DEPTH> IoReadPayloadFieldPipe("IoReadPayloadFieldPipe");
   hls_thread_local hls::stream<PayloadWordPack, DFLT_PIPE_DEPTH> IoReadPayloadFinalPipe("IoReadPayloadFinalPipe");
+
   hls_thread_local hls::stream<MspmPayloadFlit, DFLT_PIPE_DEPTH> SmInputPayloadPipe("SmInputPayloadPipe");
   hls_thread_local hls::stream<MspmPayloadFlit, DFLT_PIPE_DEPTH> SmForwardPayloadPipe("SmForwardPayloadPipe");
-  hls_thread_local hls::stream<MspmPayloadFlit, DFLT_PIPE_DEPTH> SmPayloadMatchPipe("SmPayloadMatchPipe");
-  hls_thread_local hls::stream<MspmPayloadFlit, DFLT_PIPE_DEPTH> SmPayloadSafePipe("SmPayloadSafePipe");
   hls_thread_local hls::stream<SmResultMetaFlit, DFLT_PIPE_DEPTH> SmResultMetaPipe("SmResultMetaPipe");
-  hls_thread_local hls::stream<SmResultMetaFlit, DFLT_PIPE_DEPTH> SmOutMetaPipe("SmOutMetaPipe");
+  hls_thread_local hls::stream<MspmPayloadFlit, DFLT_PIPE_DEPTH> SmPayloadSafePipe("SmPayloadSafePipe");
+
+  hls_thread_local hls::stream<NfpmPayloadFlit, DFLT_PIPE_DEPTH> NfInputPayloadPipe("NfInputPayloadPipe");
+  hls_thread_local hls::stream<NfpmPayloadFlit, DFLT_PIPE_DEPTH> NfForwardPayloadPipe("NfForwardPayloadPipe");
+  hls_thread_local hls::stream<NfInputMetaFlit, DFLT_PIPE_DEPTH> NfInputMetaPipe("NfInputMetaPipe");
+  hls_thread_local hls::stream<NfResultMetaFlit, DFLT_PIPE_DEPTH> NfResultMetaPipe("NfResultMetaPipe");
+  hls_thread_local hls::stream<NfpmPayloadFlit, DFLT_PIPE_DEPTH> NfPayloadSafePipe("NfPayloadSafePipe");
+
+  hls_thread_local hls::stream<NfpmPayloadFlit, DFLT_PIPE_DEPTH> HostPayloadPipe("HostPayloadPipe");
+  hls_thread_local hls::stream<NfResultMetaFlit, DFLT_PIPE_DEPTH> HostMetaPipe("HostMetaPipe");
   hls_thread_local hls::stream<RidBcntFlit, DFLT_PIPE_DEPTH> IoBurstWritePipe("IoBurstWritePipe");
+
   hls_thread_local hls::stream<BOOL, DFLT_PIPE_DEPTH> IoInCountPipe("IoInCountPipe");
   hls_thread_local hls::stream<BOOL, DFLT_PIPE_DEPTH> IoResultCountPipe("IoResultCountPipe");
   hls_thread_local hls::stream<BOOL, DFLT_PIPE_DEPTH> IoPayloadCountPipe("IoPayloadCountPipe");
@@ -68,9 +77,7 @@ void testbench_kernel(RawPayloadPack* testpattern_device_0, RawPayloadPack* test
                                                 IoReadPayloadMergedPipe);
 
 #if MSPM_CHECKFIELD
-  hls_thread_local hls::task field_match_task(fieldMatchKernel, IoReadPayloadMergedPipe, IoReadPayloadFieldPipe);
-  hls_thread_local hls::task field_match_fix_overflow_task(fieldMatchFixOverflowKernel, IoReadPayloadFieldPipe,
-                                                           IoReadPayloadFinalPipe);
+  hls_thread_local hls::task field_tagger_task(fieldTaggerKernel, IoReadPayloadMergedPipe, IoReadPayloadFinalPipe);
   hls_thread_local hls::task payload_source_task(payloadSourceKernel, IoReadPayloadFinalPipe, SmInputPayloadPipe,
                                                  SmForwardPayloadPipe);
 #else
@@ -79,16 +86,22 @@ void testbench_kernel(RawPayloadPack* testpattern_device_0, RawPayloadPack* test
 #endif
 
   hls_thread_local hls::task done_count_task(doneCountKernel, IoInCountPipe, IoResultCountPipe, IoPayloadCountPipe,
-                                             SmPayloadSafePipe, IoDoneCountPipe, IoPayloadDoneCountPipe);
+                                             SmPayloadSafePipe, NfPayloadSafePipe, IoDoneCountPipe,
+                                             IoPayloadDoneCountPipe);
   hls_thread_local hls::task sm_task(sm_kernel, SmInputPayloadPipe, SmResultMetaPipe);
 
-  hls_thread_local hls::task smSteering_task(smSteerPayloadKernel, SmForwardPayloadPipe, SmResultMetaPipe,
-                                             SmPayloadMatchPipe, SmPayloadSafePipe, SmOutMetaPipe);
+  hls_thread_local hls::task sm2nf_task(sm2nfKernel, SmForwardPayloadPipe, SmResultMetaPipe, NfInputPayloadPipe,
+                                        NfInputMetaPipe, SmPayloadSafePipe, NfForwardPayloadPipe);
 
-  hls_thread_local hls::task result_sink_task(resultSinkKernel, SmOutMetaPipe, IoBurstWritePipe, IoDoneCountPipe,
+  hls_thread_local hls::task nf_task(nf_kernel, NfInputPayloadPipe, NfInputMetaPipe, NfResultMetaPipe);
+
+  hls_thread_local hls::task nf2host_task(nf2hostKernel, NfForwardPayloadPipe, NfResultMetaPipe, HostPayloadPipe,
+                                          HostMetaPipe, NfPayloadSafePipe);
+
+  hls_thread_local hls::task result_sink_task(resultSinkKernel, HostMetaPipe, IoBurstWritePipe, IoDoneCountPipe,
                                               IoResultCountPipe);
 
-  payloadWriteKernel(payload_sink_device, -1, true, -1, SmPayloadMatchPipe, IoPayloadCountPipe, IoPayloadDoneCountPipe);
+  payloadWriteKernel(payload_sink_device, -1, true, -1, HostPayloadPipe, IoPayloadCountPipe, IoPayloadDoneCountPipe);
 
   resultWriteKernel(trace_device, skipWrite, buffer_size, IoBurstWritePipe);
 }

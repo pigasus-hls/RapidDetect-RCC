@@ -102,15 +102,8 @@ struct PayloadWritePack {
 struct RidBcnt {
   UINT bcntSeq;     // barrier cnt or mspm packet sequence
   URID ridPlusOne;  // RID+1; 0 means invalid
-#if (MSPM_CHECKTAG && MSPM_RESOLVE_CONFLICT && !SM_EXPAND_OVERLOADED)
-  USHORT tag;  // optional: xor tag value of match (for overload RID checking)
-#endif
-#if MSPM_TRACKPOS
+#if MSPM_TRACKPOS && NFPM_TRACKPOS
   USHORT pos;  // optional: detection position
-#endif
-
-#if (MSPM_CHECKTAG && MSPM_RESOLVE_CONFLICT && !SM_EXPAND_OVERLOADED && MSPM_TRACKPOS) || \
-    (!(MSPM_CHECKTAG && MSPM_RESOLVE_CONFLICT && !SM_EXPAND_OVERLOADED) && !(MSPM_TRACKPOS))
   USHORT pad;  // padding to align to two power
 #endif
 };

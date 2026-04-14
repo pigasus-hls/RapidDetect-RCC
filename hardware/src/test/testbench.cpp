@@ -29,6 +29,8 @@ SOFTWARE.
 
 #include <mspm/mspm_params.h>
 #include <sm_params.h>
+#include <nfpm/nfpm_params.h>
+#include <nf_params.h>
 
 #include <test/testbench.h>
 
@@ -101,12 +103,12 @@ void testPatternPrintFull(RidBcnt ridBcnt, [[maybe_unused]] UINT tidx) {
   // display result trace
   if (ridBcnt.ridPlusOne) {
     std::cout << "Detected rid+1=" << ridBcnt.ridPlusOne;
-#if MSPM_TRACKSEQ
+#if MSPM_TRACKSEQ && NFPM_TRACKSEQ
     std::cout << " seq=" << ridBcnt.bcntSeq;
 #else
     std::cout << " bcnt=" << ridBcnt.bcntSeq;
 #endif
-#if MSPM_TRACKPOS
+#if MSPM_TRACKPOS && NFPM_TRACKPOS
     std::cout << " pos=" << ridBcnt.pos - (TEST_PREPEND7 ? (MSPM_MASK_WIDTH - 1) : 0);
 #endif
 
@@ -169,20 +171,14 @@ void testPatternCheck(RidBcnt ridBcnt,             // detection entry
 
         expandedRid++;
 
-        if (1
-#if MSPM_CHECKTAG && !SM_EXPAND_OVERLOADED
-            && (ridBcnt.tag == collision_table_taglist[offset + k])
+        // if match found
+        seenNumTimes[rid]++;
+        bcntLastSeen[rid] = ridBcnt.bcntSeq;
+        cntByLen[rid2fplen_table[rid] - 2]++;
+        matchedRid++;
+#if MSPM_TRACKPOS && NFPM_TRACKPOS && TEST_FALSE_POSITIVES
+        checkFalsePositives(rid, ridBcnt.bcntSeq, ridBcnt.pos, pktBuff, pktOffset);
 #endif
-        ) {
-          // if match found
-          seenNumTimes[rid]++;
-          bcntLastSeen[rid] = ridBcnt.bcntSeq;
-          cntByLen[rid2fplen_table[rid] - 2]++;
-          matchedRid++;
-#if MSPM_TRACKPOS && TEST_FALSE_POSITIVES
-          checkFalsePositives(rid, ridBcnt.bcntSeq, ridBcnt.pos, pktBuff, pktOffset);
-#endif
-        }
       }
     }  // if an overloaded RID
     else
@@ -192,7 +188,7 @@ void testPatternCheck(RidBcnt ridBcnt,             // detection entry
       seenNumTimes[ridBcnt.ridPlusOne - 1]++;
       bcntLastSeen[ridBcnt.ridPlusOne - 1] = ridBcnt.bcntSeq;
       cntByLen[rid2fplen_table[ridBcnt.ridPlusOne - 1] - 2]++;
-#if MSPM_TRACKPOS && TEST_FALSE_POSITIVES
+#if MSPM_TRACKPOS && NFPM_TRACKPOS && TEST_FALSE_POSITIVES
       checkFalsePositives(ridBcnt.ridPlusOne - 1, ridBcnt.bcntSeq, ridBcnt.pos, pktBuff, pktOffset);
 #endif
     }  // normal RID
@@ -212,12 +208,8 @@ void testPatternFinish() {
   mspmPrintParameters();
   smPrintParameters();
 
-  // sm2nfPrintParameters();
-
-  // nfpmPrintParameters();
-  // nfPrintParameters();
-
-  // nf2hostPrintParameters();
+  nfpmPrintParameters();
+  nfPrintParameters();
 
   ioPrintParameters();
   rapiddPrintParameters();
@@ -233,7 +225,7 @@ void testPatternFinish() {
     int total = 0;
     [[maybe_unused]] int falseTotal = 0;
     for (int len = 2; len <= MSPM_MASK_WIDTH; len++) {
-#if MSPM_TRACKPOS
+#if MSPM_TRACKPOS && NFPM_TRACKPOS
       printf("Rules Encountered len%d: %d (false %d, %f percent)\n", len, cntByLen[len - 2], falseCntByLen[len - 2],
              100.0 * falseCntByLen[len - 2] / cntByLen[len - 2]);
 #else
@@ -243,15 +235,8 @@ void testPatternFinish() {
       falseTotal += falseCntByLen[len - 2];
     }
     printf("Rules Encountered: %d\n", total);
-#if MSPM_TRACKPOS
+#if MSPM_TRACKPOS && NFPM_TRACKPOS
     printf("False %d, %f percent\n", falseTotal, 100.0 * falseTotal / total);
-#endif
-#if MSPM_RESOLVE_CONFLICT && !SM_EXPAND_OVERLOADED
-    printf("Num of Overloaded Rid: %d\n", overloadedRid);
-    printf("Num of Expanded Rid: %d\n", expandedRid);
-    printf("Num of Matched Rid: %d\n", matchedRid);
-    printf("Num of Raw Rid: %d\n", rawRid);
-    printf("%d\n", rawRid - overloadedRid + matchedRid);
 #endif
   }
 
