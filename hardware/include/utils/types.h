@@ -103,28 +103,3 @@ struct PayloadFlit : public TSEQ, public TFTAG<NumWords> {
   BOOL sameflow;                // next packet from same flow, only sampled with EOP
   PAYLOAD_WORD word[NumWords];  // payload words
 };
-
-///////////////////////////////////////////////////////////////////////////////
-// void types to produce and consume dummy data
-///////////////////////////////////////////////////////////////////////////////
-
-// Disables profiling when using this pipe definition
-template <typename T>
-class VoidPipe {
- public:
-  static T read(bool &_Success) {
-    _Success = true;
-    return T();
-  }
-
-  static T read() { return T(); }
-
-  static void write([[maybe_unused]] const T &_Data, bool &_Success) {
-    _Success = true;
-    return;
-  }
-
-  static void write([[maybe_unused]] const T &_Data) { return; }
-};
-
-struct VoidHeader {};

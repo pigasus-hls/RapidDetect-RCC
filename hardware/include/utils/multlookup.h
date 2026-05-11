@@ -26,16 +26,6 @@ SOFTWARE.
 #pragma once
 
 /// Hardened look-up table to replace the multiply in the hash function
-
-#if SPUMP_PRGMA
-[[intel::singlepump]]
-#endif
-#if DPUMP_PRGMA
-[[intel::doublepump]]
-#endif
-#if DPORT_PRGMA
-[[intel::simple_dual_port]]
-#endif
 static const ULONG lookupTable[256] = {
     MAGIC_NUM * 0,   MAGIC_NUM * 1,   MAGIC_NUM * 2,   MAGIC_NUM * 3,   MAGIC_NUM * 4,   MAGIC_NUM * 5,
     MAGIC_NUM * 6,   MAGIC_NUM * 7,   MAGIC_NUM * 8,   MAGIC_NUM * 9,

@@ -119,9 +119,6 @@ void nfpmHashCheck(                       // INPUTS
                                                                        // META INFO INPUTS
     USEQ seq, UPOS wordCount);                                         // meta info
 
-#ifdef SYCLBUILD
-SYCL_EXTERNAL
-#endif
 void nfpmAccumFP(NfpmHashHit hits[NFPM_MASK_WIDTH][NFPM_LOOKUP_WIDTH],  // hits to look up
                  NfpmFingerprint fp[NFPM_MASK_WIDTH][NFPM_LOOKUP_WIDTH]
 #if NFPM_CHECK_FPALT
