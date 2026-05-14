@@ -1,6 +1,6 @@
 # RapidDetect on V80
 
-Contact: [Shashank Obla](mailto:sobla@andrew.cmu.edu) (PhD Student at Carnegie Mellon University)
+Contact: [Shashank Obla](mailto:sobla@andrew.cmu.edu) (PhD Student at Carnegie Mellon University)  
 A Short Paper has also been published in the FCCM 2026 Proceedings and can be found [here](./assets/FCCM_RCC_2026.pdf).
 
 RapidDetect is an HLS-based 200Gbps (@400MHz) hardware-accelerated threat detection system for streaming, structured system logs using [Sigma](https://github.com/sigmahq/sigma) rules. This repository, prepared for the FCCM 2026 Reconfigurable Computing Challenge, contains the Vitis HLS based implementation of the full RapidDetect FPGA pipeline.
