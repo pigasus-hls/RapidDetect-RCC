@@ -3,6 +3,8 @@
 Contact: [Shashank Obla](mailto:sobla@andrew.cmu.edu) (PhD Student at Carnegie Mellon University)  
 A Short Paper has also been published in the FCCM 2026 Proceedings and can be found [here](./assets/FCCM_RCC_2026.pdf).
 
+Note: This repo is not yet upto date with the DCMAC 200G design demoed at FCCM. Keep your eyes peeled and we'll soon update the repo with the latest Ethernet based design. 
+
 RapidDetect is an HLS-based 200Gbps (@400MHz) hardware-accelerated threat detection system for streaming, structured system logs using [Sigma](https://github.com/sigmahq/sigma) rules. This repository, prepared for the FCCM 2026 Reconfigurable Computing Challenge, contains the Vitis HLS based implementation of the full RapidDetect FPGA pipeline.
 
 Inspired by [Pigasus Intrustion Prevention/Detection System](https://www.usenix.org/conference/osdi20/presentation/zhao-zhipeng), RapidDetect opts for a heterogeneous FPGA and CPU architecture for high-throughput, low-latency threat detection in streaming system logs. This version of the system is built for the V80 (occupying < 1 out of 3 SLRs) using AVED as a starting point and QDMA to move data and control information between the host and the FPGA. The Multi-String Pattern Matcher is capable of processing upwards of 10,000 string literals at 200Gbps (currently >4000 literals based on the ~200 Linux Sigma rules). This is followed by the Conjunct Pattern Matcher (CPM) which checks the logs that pass through the MSPM against only the rules that matched in the MSPM. Using a bloom-fliter like fingerprint, the CPM can check for conjunctions (AND) of string literals significantly reducing the false positive rate. 
