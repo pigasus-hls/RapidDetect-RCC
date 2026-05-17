@@ -45,6 +45,3 @@ IDE.log
 
 # Others
 .nfs*
-
-# Do not upload the SMBus IP
-smbus*/
