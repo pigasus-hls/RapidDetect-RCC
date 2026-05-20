@@ -1,7 +1,7 @@
 # RapidDetect on V80
 
-Contact: [Shashank Obla](mailto:sobla@andrew.cmu.edu) (PhD Student at Carnegie Mellon University)  
-A Short Paper has also been published in the FCCM 2026 Proceedings and can be found [here](./assets/FCCM_RCC_2026.pdf).
+Contact: [Shashank Obla](https://www.andrew.cmu.edu/user/sobla) (PhD Student at Carnegie Mellon University)  
+A Short Paper has also been published in the FCCM 2026 Proceedings and can be found [here]([./assets/FCCM_RCC_2026.pdf](https://www.andrew.cmu.edu/user/sobla/publications/rapidscan-fccm-rcc/)).
 
 Note: This repo is not yet upto date with the DCMAC 200G design demoed at FCCM. Keep your eyes peeled and we'll soon update the repo with the latest Ethernet based design. 
 
