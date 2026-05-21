@@ -2,7 +2,7 @@
 
 Contact: [Shashank Obla](https://www.andrew.cmu.edu/user/sobla) (PhD Student at Carnegie Mellon University)  
 - A Short Paper has also been published in the FCCM 2026 Proceedings and can be found [here](https://www.andrew.cmu.edu/user/sobla/publications/rapidscan-fccm-rcc/).
-- We designed a [3D printed shroud](https://www.andrew.cmu.edu/user/sobla/projects/v80-shroud/) for active cooling the V80 on our desktop workstation! 
+- We designed a [3D printed shroud](https://www.andrew.cmu.edu/user/sobla/projects/v80-shroud/) to provide active cooling to the V80 on our desktop workstation! 
 
 Note: This repo is not yet upto date with the DCMAC 200G design demoed at FCCM. Keep your eyes peeled and we'll soon update the repo with the latest Ethernet based design. 
 
