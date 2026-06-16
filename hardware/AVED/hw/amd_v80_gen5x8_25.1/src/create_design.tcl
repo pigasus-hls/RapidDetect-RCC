@@ -43,6 +43,11 @@ proc do_aved_create_design { } {
   # Set NoC Phases for HBM access
   set_property NOC_PHASES "load_HBM, HBM0, HBM1, HBM2, HBM3, HBM4, HBM5, HBM6, HBM7, HBM8, HBM9, HBM10, HBM11, HBM12, HBM13, HBM14, HBM15" [current_project]
 
+  # Add RTL files
+  import_files -fileset sources_1 -norecurse "$src_dir/sources/axis_seg_to_unseg_converter.v"
+  import_files -fileset sources_1 -norecurse "$src_dir/sources/dcmac_syncer_reset.v"
+  import_files -fileset sources_1 -norecurse "$src_dir/sources/reset_registers.v"
+
   # Add base to block diagram
   source "$src_dir/bd/create_bd_design.tcl"
   create_root_design ""

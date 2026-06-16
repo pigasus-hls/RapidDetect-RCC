@@ -103,3 +103,30 @@ struct PayloadFlit : public TSEQ, public TFTAG<NumWords> {
   BOOL sameflow;                // next packet from same flow, only sampled with EOP
   PAYLOAD_WORD word[NumWords];  // payload words
 };
+
+// Statistics DirectIO types
+template <typename T>
+class simulation_directio {
+  T* data;
+
+ public:
+  simulation_directio(const simulation_directio& other) { this->data = other.data; }
+  // simulation_directio& operator=(const simulation_directio&) = delete;
+  simulation_directio() {
+    data = new T();
+    *data = 0;
+  }
+
+  T read() { return *data; }
+
+  void write(const T& value) { *data = value; }
+};
+
+#ifdef __SYNTHESIS__
+#include <hls_directio.h>
+using count_directio_t = hls::ap_none<uint32_t>;
+using done_directio_t = hls::ap_none<bool>;
+#else
+using count_directio_t = simulation_directio<uint32_t>;
+using done_directio_t = simulation_directio<bool>;
+#endif

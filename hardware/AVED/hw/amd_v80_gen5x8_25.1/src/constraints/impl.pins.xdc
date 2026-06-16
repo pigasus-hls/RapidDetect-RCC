@@ -1,21 +1,21 @@
 # Copyright (c) 2024 - 2025 Advanced Micro Devices, Inc. All rights reserved.
-# 
-# Permission is hereby granted, free of charge, to any person obtaining a 
-# copy of this software and associated documentation files (the "Software"), 
-# to deal in the Software without restriction, including without limitation 
-# the rights to use, copy, modify, merge, publish, distribute, sublicense, 
-# and/or sell copies of the Software, and to permit persons to whom the 
+#
+# Permission is hereby granted, free of charge, to any person obtaining a
+# copy of this software and associated documentation files (the "Software"),
+# to deal in the Software without restriction, including without limitation
+# the rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Software, and to permit persons to whom the
 # Software is furnished to do so, subject to the following conditions:
-# 
-# The above copyright notice and this permission notice shall be included in 
+#
+# The above copyright notice and this permission notice shall be included in
 # all copies or substantial portions of the Software.
-# 
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL 
-# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
-# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 ############################################################
 
@@ -272,93 +272,92 @@ set_property -dict { PACKAGE_PIN CG6     IOSTANDARD LVCMOS12    SLEW SLOW   DRIV
 set_property -dict { PACKAGE_PIN CH7     IOSTANDARD LVCMOS12    SLEW SLOW   DRIVE 8   } [get_ports "smbus_0_sda_io"]        ;# Bank 702 VCCO - VR_1V2_VCCO_DDR4
 
 # Uncomment below qsfp and mcio pins as design requires
-# set_property -dict { PACKAGE_PIN AR51                                                 } [get_ports "qsfp0_322mhz_clk_p"]    ;# Bank 209 " GTM_REFCLKP0_209
-#                                                                                                                              
-# set_property -dict { PACKAGE_PIN AE67                                                 } [get_ports "qsfp0_4x_grx_p[0]"]     ;# Bank 209 " GTM_RXP0_209    
-# set_property -dict { PACKAGE_PIN AE64                                                 } [get_ports "qsfp0_4x_grx_p[1]"]     ;# Bank 209 " GTM_RXP1_209    
-# set_property -dict { PACKAGE_PIN AC67                                                 } [get_ports "qsfp0_4x_grx_p[2]"]     ;# Bank 209 " GTM_RXP2_209    
-# set_property -dict { PACKAGE_PIN AC64                                                 } [get_ports "qsfp0_4x_grx_p[3]"]     ;# Bank 209 " GTM_RXP3_209    
-#                                                                                                                                                           
-# set_property -dict { PACKAGE_PIN AG61                                                 } [get_ports "qsfp0_4x_gtx_p[0]"]     ;# Bank 209 " GTM_TXP0_209    
-# set_property -dict { PACKAGE_PIN AG58                                                 } [get_ports "qsfp0_4x_gtx_p[1]"]     ;# Bank 209 " GTM_TXP1_209    
-# set_property -dict { PACKAGE_PIN AE61                                                 } [get_ports "qsfp0_4x_gtx_p[2]"]     ;# Bank 209 " GTM_TXP2_209    
-# set_property -dict { PACKAGE_PIN AE58                                                 } [get_ports "qsfp0_4x_gtx_p[3]"]     ;# Bank 209 " GTM_TXP3_209
-# 
+set_property -dict { PACKAGE_PIN AR51                                                 } [get_ports "qsfp0_322mhz_clk_p"]    ;# Bank 209 " GTM_REFCLKP0_209
+
+set_property -dict { PACKAGE_PIN AE67                                                 } [get_ports "qsfp0_4x_grx_p[0]"]     ;# Bank 209 " GTM_RXP0_209
+set_property -dict { PACKAGE_PIN AE64                                                 } [get_ports "qsfp0_4x_grx_p[1]"]     ;# Bank 209 " GTM_RXP1_209
+set_property -dict { PACKAGE_PIN AC67                                                 } [get_ports "qsfp0_4x_grx_p[2]"]     ;# Bank 209 " GTM_RXP2_209
+set_property -dict { PACKAGE_PIN AC64                                                 } [get_ports "qsfp0_4x_grx_p[3]"]     ;# Bank 209 " GTM_RXP3_209
+
+set_property -dict { PACKAGE_PIN AG61                                                 } [get_ports "qsfp0_4x_gtx_p[0]"]     ;# Bank 209 " GTM_TXP0_209
+set_property -dict { PACKAGE_PIN AG58                                                 } [get_ports "qsfp0_4x_gtx_p[1]"]     ;# Bank 209 " GTM_TXP1_209
+set_property -dict { PACKAGE_PIN AE61                                                 } [get_ports "qsfp0_4x_gtx_p[2]"]     ;# Bank 209 " GTM_TXP2_209
+set_property -dict { PACKAGE_PIN AE58                                                 } [get_ports "qsfp0_4x_gtx_p[3]"]     ;# Bank 209 " GTM_TXP3_209
+#
 # set_property -dict { PACKAGE_PIN AA67                                                 } [get_ports "qsfp1_4x_grx_p[0]"]     ;# Bank 210 " GTM_RXP0_210
 # set_property -dict { PACKAGE_PIN AA64                                                 } [get_ports "qsfp1_4x_grx_p[1]"]     ;# Bank 210 " GTM_RXP1_210
 # set_property -dict { PACKAGE_PIN W67                                                  } [get_ports "qsfp1_4x_grx_p[2]"]     ;# Bank 210 " GTM_RXP2_210
 # set_property -dict { PACKAGE_PIN W64                                                  } [get_ports "qsfp1_4x_grx_p[3]"]     ;# Bank 210 " GTM_RXP3_210
-#                                                                                                                              
+#
 # set_property -dict { PACKAGE_PIN AC61                                                 } [get_ports "qsfp1_4x_gtx_p[0]"]     ;# Bank 210 " GTM_TXP0_210
 # set_property -dict { PACKAGE_PIN AC58                                                 } [get_ports "qsfp1_4x_gtx_p[1]"]     ;# Bank 210 " GTM_TXP1_210
 # set_property -dict { PACKAGE_PIN AA61                                                 } [get_ports "qsfp1_4x_gtx_p[2]"]     ;# Bank 210 " GTM_TXP2_210
 # set_property -dict { PACKAGE_PIN AA58                                                 } [get_ports "qsfp1_4x_gtx_p[3]"]     ;# Bank 210 " GTM_TXP3_210
-# 
-# set_property -dict { PACKAGE_PIN AL17                                                 } [get_ports "qsfp2_322mhz_clk_p"]    ;# Bank 111 " GTM_REFCLKP0_111
-#                          
+#
+set_property -dict { PACKAGE_PIN AL17                                                 } [get_ports "qsfp2_322mhz_clk_p"]    ;# Bank 111 " GTM_REFCLKP0_111
+#
 # set_property -dict { PACKAGE_PIN U3                                                   } [get_ports "qsfp2_4x_grx_p[0]"]     ;# Bank 112 " GTM_RXP0_112
 # set_property -dict { PACKAGE_PIN U6                                                   } [get_ports "qsfp2_4x_grx_p[1]"]     ;# Bank 112 " GTM_RXP1_112
 # set_property -dict { PACKAGE_PIN R3                                                   } [get_ports "qsfp2_4x_grx_p[2]"]     ;# Bank 112 " GTM_RXP2_112
 # set_property -dict { PACKAGE_PIN R6                                                   } [get_ports "qsfp2_4x_grx_p[3]"]     ;# Bank 112 " GTM_RXP3_112
-#                                                                                                                              
+#
 # set_property -dict { PACKAGE_PIN U9                                                   } [get_ports "qsfp2_4x_gtx_p[0]"]     ;# Bank 112 " GTM_TXP0_112
 # set_property -dict { PACKAGE_PIN U12                                                  } [get_ports "qsfp2_4x_gtx_p[1]"]     ;# Bank 112 " GTM_TXP1_112
 # set_property -dict { PACKAGE_PIN R9                                                   } [get_ports "qsfp2_4x_gtx_p[2]"]     ;# Bank 112 " GTM_TXP2_112
 # set_property -dict { PACKAGE_PIN R12                                                  } [get_ports "qsfp2_4x_gtx_p[3]"]     ;# Bank 112 " GTM_TXP3_112
-# 
-# set_property -dict { PACKAGE_PIN AA3                                                  } [get_ports "qsfp3_4x_grx_p[0]"]     ;# Bank 111 " GTM_RXP0_111
-# set_property -dict { PACKAGE_PIN AA6                                                  } [get_ports "qsfp3_4x_grx_p[1]"]     ;# Bank 111 " GTM_RXP1_111
-# set_property -dict { PACKAGE_PIN W3                                                   } [get_ports "qsfp3_4x_grx_p[2]"]     ;# Bank 111 " GTM_RXP2_111
-# set_property -dict { PACKAGE_PIN W6                                                   } [get_ports "qsfp3_4x_grx_p[3]"]     ;# Bank 111 " GTM_RXP3_111
-#                                                                                                                              
-# set_property -dict { PACKAGE_PIN AA9                                                  } [get_ports "qsfp3_4x_gtx_p[0]"]     ;# Bank 111 " GTM_TXP0_111
-# set_property -dict { PACKAGE_PIN AA12                                                 } [get_ports "qsfp3_4x_gtx_p[1]"]     ;# Bank 111 " GTM_TXP1_111
-# set_property -dict { PACKAGE_PIN W9                                                   } [get_ports "qsfp3_4x_gtx_p[2]"]     ;# Bank 111 " GTM_TXP2_111
-# set_property -dict { PACKAGE_PIN W12                                                  } [get_ports "qsfp3_4x_gtx_p[3]"]     ;# Bank 111 " GTM_TXP3_111 
-# 
+#
+set_property -dict { PACKAGE_PIN AA3                                                  } [get_ports "qsfp3_4x_grx_p[0]"]     ;# Bank 111 " GTM_RXP0_111
+set_property -dict { PACKAGE_PIN AA6                                                  } [get_ports "qsfp3_4x_grx_p[1]"]     ;# Bank 111 " GTM_RXP1_111
+set_property -dict { PACKAGE_PIN W3                                                   } [get_ports "qsfp3_4x_grx_p[2]"]     ;# Bank 111 " GTM_RXP2_111
+set_property -dict { PACKAGE_PIN W6                                                   } [get_ports "qsfp3_4x_grx_p[3]"]     ;# Bank 111 " GTM_RXP3_111
+
+set_property -dict { PACKAGE_PIN AA9                                                  } [get_ports "qsfp3_4x_gtx_p[0]"]     ;# Bank 111 " GTM_TXP0_111
+set_property -dict { PACKAGE_PIN AA12                                                 } [get_ports "qsfp3_4x_gtx_p[1]"]     ;# Bank 111 " GTM_TXP1_111
+set_property -dict { PACKAGE_PIN W9                                                   } [get_ports "qsfp3_4x_gtx_p[2]"]     ;# Bank 111 " GTM_TXP2_111
+set_property -dict { PACKAGE_PIN W12                                                  } [get_ports "qsfp3_4x_gtx_p[3]"]     ;# Bank 111 " GTM_TXP3_111
+
 # set_property -dict { PACKAGE_PIN BP53                                                 } [get_ports "mcio0_100mhz_clk_p"]    ;# Bank 200 " GTYP_REFCLKP0_200
-# 
+#
 # set_property -dict { PACKAGE_PIN BP66                                                 } [get_ports "mcio0_4x_grx_p[0]"]     ;# Bank 200 " GTYP_RXP0_200
 # set_property -dict { PACKAGE_PIN BP62                                                 } [get_ports "mcio0_4x_grx_p[1]"]     ;# Bank 200 " GTYP_RXP1_200
 # set_property -dict { PACKAGE_PIN BN68                                                 } [get_ports "mcio0_4x_grx_p[2]"]     ;# Bank 200 " GTYP_RXP2_200
 # set_property -dict { PACKAGE_PIN BN64                                                 } [get_ports "mcio0_4x_grx_p[3]"]     ;# Bank 200 " GTYP_RXP3_200
-# 
+#
 # set_property -dict { PACKAGE_PIN BR59                                                 } [get_ports "mcio0_4x_gtx_p[0]"]     ;# Bank 200 " GTYP_TXP0_200
 # set_property -dict { PACKAGE_PIN BR55                                                 } [get_ports "mcio0_4x_gtx_p[1]"]     ;# Bank 200 " GTYP_TXP1_200
 # set_property -dict { PACKAGE_PIN BP57                                                 } [get_ports "mcio0_4x_gtx_p[2]"]     ;# Bank 200 " GTYP_TXP2_200
 # set_property -dict { PACKAGE_PIN BN59                                                 } [get_ports "mcio0_4x_gtx_p[3]"]     ;# Bank 200 " GTYP_TXP3_200
-# 
+#
 # set_property -dict { PACKAGE_PIN AG55                                                 } [get_ports "mcio1_100mhz_clk_p"]    ;# Bank 213 " GTYP_REFCLKP0_213
-# 
+#
 # set_property -dict { PACKAGE_PIN D66                                                  } [get_ports "mcio1_a_4x_grx_p[0]"]   ;# Bank 213 " GTYP_RXP0_213
 # set_property -dict { PACKAGE_PIN B65                                                  } [get_ports "mcio1_a_4x_grx_p[1]"]   ;# Bank 213 " GTYP_RXP1_213
 # set_property -dict { PACKAGE_PIN D64                                                  } [get_ports "mcio1_a_4x_grx_p[2]"]   ;# Bank 213 " GTYP_RXP2_213
 # set_property -dict { PACKAGE_PIN B63                                                  } [get_ports "mcio1_a_4x_grx_p[3]"]   ;# Bank 213 " GTYP_RXP3_213
-# 
+#
 # set_property -dict { PACKAGE_PIN G69                                                  } [get_ports "mcio1_a_4x_gtx_p[0]"]   ;# Bank 213 " GTYP_TXP0_213
 # set_property -dict { PACKAGE_PIN E68                                                  } [get_ports "mcio1_a_4x_gtx_p[1]"]   ;# Bank 213 " GTYP_TXP1_213
 # set_property -dict { PACKAGE_PIN G67                                                  } [get_ports "mcio1_a_4x_gtx_p[2]"]   ;# Bank 213 " GTYP_TXP2_213
 # set_property -dict { PACKAGE_PIN G65                                                  } [get_ports "mcio1_a_4x_gtx_p[3]"]   ;# Bank 213 " GTYP_TXP3_213
-# 
+#
 # set_property -dict { PACKAGE_PIN D62                                                  } [get_ports "mcio1_b_4x_grx_p[0]"]   ;# Bank 214 " GTYP_RXP0_214
 # set_property -dict { PACKAGE_PIN B61                                                  } [get_ports "mcio1_b_4x_grx_p[1]"]   ;# Bank 214 " GTYP_RXP1_214
 # set_property -dict { PACKAGE_PIN D60                                                  } [get_ports "mcio1_b_4x_grx_p[2]"]   ;# Bank 214 " GTYP_RXP2_214
 # set_property -dict { PACKAGE_PIN B59                                                  } [get_ports "mcio1_b_4x_grx_p[3]"]   ;# Bank 214 " GTYP_RXP3_214
-# 
+#
 # set_property -dict { PACKAGE_PIN G63                                                  } [get_ports "mcio1_b_4x_gtx_p[0]"]   ;# Bank 214 " GTYP_TXP0_214
 # set_property -dict { PACKAGE_PIN G61                                                  } [get_ports "mcio1_b_4x_gtx_p[1]"]   ;# Bank 214 " GTYP_TXP1_214
 # set_property -dict { PACKAGE_PIN J60                                                  } [get_ports "mcio1_b_4x_gtx_p[2]"]   ;# Bank 214 " GTYP_TXP2_214
 # set_property -dict { PACKAGE_PIN G59                                                  } [get_ports "mcio1_b_4x_gtx_p[3]"]   ;# Bank 214 " GTYP_TXP3_214
-# 
+#
 # set_property -dict { PACKAGE_PIN AB53                                                 } [get_ports "mcio2_100mhz_clk_p"]    ;# Bank 218 " GTYP_REFCLKP0_218
-# 
+#
 # set_property -dict { PACKAGE_PIN D46                                                  } [get_ports "mcio2_4x_grx_p[0]"]     ;# Bank 218 " GTYP_RXP0_218
 # set_property -dict { PACKAGE_PIN B45                                                  } [get_ports "mcio2_4x_grx_p[1]"]     ;# Bank 218 " GTYP_RXP1_218
 # set_property -dict { PACKAGE_PIN D44                                                  } [get_ports "mcio2_4x_grx_p[2]"]     ;# Bank 218 " GTYP_RXP2_218
 # set_property -dict { PACKAGE_PIN B43                                                  } [get_ports "mcio2_4x_grx_p[3]"]     ;# Bank 218 " GTYP_RXP3_218
-# 
+#
 # set_property -dict { PACKAGE_PIN J46                                                  } [get_ports "mcio2_4x_gtx_p[0]"]     ;# Bank 218 " GTYP_TXP0_218
 # set_property -dict { PACKAGE_PIN G45                                                  } [get_ports "mcio2_4x_gtx_p[1]"]     ;# Bank 218 " GTYP_TXP1_218
 # set_property -dict { PACKAGE_PIN J44                                                  } [get_ports "mcio2_4x_gtx_p[2]"]     ;# Bank 218 " GTYP_TXP2_218
 # set_property -dict { PACKAGE_PIN G43                                                  } [get_ports "mcio2_4x_gtx_p[3]"]     ;# Bank 218 " GTYP_TXP3_218
-

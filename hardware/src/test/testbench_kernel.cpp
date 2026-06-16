@@ -30,8 +30,50 @@ SOFTWARE.
 #include <hls_stream.h>
 #include <hls_task.h>
 
-void testbench_kernel(RawPayloadPack* testpattern_device_0, RawPayloadPack* testpattern_device_1,
-                      RidBcntPack* trace_device, PayloadWritePack* payload_sink_device, UINT count, BOOL skipWrite,
+#include <iostream>
+
+#include <unistd.h>
+
+void testbench_control(count_directio_t &sourcePayloadCount, count_directio_t &sinkPayloadCount,
+                       count_directio_t &resultCount, done_directio_t &resultDone, done_directio_t &payloadDone,
+                       count_directio_t &SmSafePayloadCount, count_directio_t &NfSafePayloadCount) {
+  resultDone.write(false);
+  payloadDone.write(false);
+
+  uint32_t source_count = 0, sink_count = 0, result_count = 0, sm_safe_count = 0, nf_safe_count = 0;
+
+  while (true) {
+    usleep(1000);
+    uint32_t new_source_count = sourcePayloadCount.read();
+    uint32_t new_sink_count = sinkPayloadCount.read();
+    uint32_t new_result_count = resultCount.read();
+    uint32_t new_sm_safe_count = SmSafePayloadCount.read();
+    uint32_t new_nf_safe_count = NfSafePayloadCount.read();
+
+    if (new_source_count != source_count || new_sink_count != sink_count || new_result_count != result_count ||
+        new_sm_safe_count != sm_safe_count || new_nf_safe_count != nf_safe_count) {
+      source_count = new_source_count;
+      sink_count = new_sink_count;
+      result_count = new_result_count;
+      sm_safe_count = new_sm_safe_count;
+      nf_safe_count = new_nf_safe_count;
+      // std::cout << "Source count: " << source_count << ", Sink count: " << sink_count
+      //       << ", Result count: " << result_count << ", SM safe count: " << sm_safe_count
+      //       << ", NF safe count: " << nf_safe_count << std::endl;
+    }
+
+    if (new_sm_safe_count + new_nf_safe_count + new_sink_count == new_source_count) {
+      payloadDone.write(true);
+    }
+
+    if (new_sm_safe_count + new_nf_safe_count + new_result_count == new_source_count) {
+      resultDone.write(true);
+    }
+  }
+}
+
+void testbench_kernel(RawPayloadPack *testpattern_device_0, RawPayloadPack *testpattern_device_1,
+                      RidBcntPack *trace_device, PayloadWritePack *payload_sink_device, UINT count, BOOL skipWrite,
                       UINT buffer_size) {
 #pragma HLS INTERFACE mode = m_axi depth = 8192 port = testpattern_device_0 bundle = gmem0
 #pragma HLS INTERFACE mode = m_axi depth = 8192 port = testpattern_device_1 bundle = gmem1
@@ -61,17 +103,25 @@ void testbench_kernel(RawPayloadPack* testpattern_device_0, RawPayloadPack* test
   hls_thread_local hls::stream<NfpmPayloadFlit, DFLT_PIPE_DEPTH> NfPayloadSafePipe("NfPayloadSafePipe");
 
   hls_thread_local hls::stream<NfpmPayloadFlit, DFLT_PIPE_DEPTH> HostPayloadPipe("HostPayloadPipe");
+  hls_thread_local hls::stream<NfpmPayloadFlit, DFLT_PIPE_DEPTH> OverflowPipe("OverflowPipe");
   hls_thread_local hls::stream<NfResultMetaFlit, DFLT_PIPE_DEPTH> HostMetaPipe("HostMetaPipe");
   hls_thread_local hls::stream<RidBcntFlit, DFLT_PIPE_DEPTH> IoBurstWritePipe("IoBurstWritePipe");
+  hls_thread_local hls::stream<PayloadWritePack, DFLT_PIPE_DEPTH> IoBurstPayloadWritePipe("IoBurstPayloadWritePipe");
 
-  hls_thread_local hls::stream<BOOL, DFLT_PIPE_DEPTH> IoInCountPipe("IoInCountPipe");
-  hls_thread_local hls::stream<BOOL, DFLT_PIPE_DEPTH> IoResultCountPipe("IoResultCountPipe");
-  hls_thread_local hls::stream<BOOL, DFLT_PIPE_DEPTH> IoPayloadCountPipe("IoPayloadCountPipe");
-  hls_thread_local hls::stream<BOOL, DFLT_PIPE_DEPTH> IoDoneCountPipe("IoDoneCountPipe");
-  hls_thread_local hls::stream<BOOL, DFLT_PIPE_DEPTH> IoPayloadDoneCountPipe("IoPayloadDoneCountPipe");
+  hls_thread_local count_directio_t sourcePayloadCount;
+  hls_thread_local count_directio_t sinkPayloadCount;
+  hls_thread_local count_directio_t resultCount;
+  hls_thread_local done_directio_t resultDone;
+  hls_thread_local done_directio_t payloadDone;
+  hls_thread_local count_directio_t SmSafePayloadCount;
+  hls_thread_local count_directio_t NfSafePayloadCount;
+
+  hls_thread_local hls::task testbench_control_task(testbench_control, sourcePayloadCount, sinkPayloadCount,
+                                                    resultCount, resultDone, payloadDone, SmSafePayloadCount,
+                                                    NfSafePayloadCount);
 
   payloadReadKernel(testpattern_device_0, testpattern_device_1, IoBurstReadPayloadPipe, IoReadPayloadSplitPipe, count,
-                    IoInCountPipe);
+                    sourcePayloadCount);
 
   hls_thread_local hls::task payload_merge_task(mergePipesKernel, IoBurstReadPayloadPipe, IoReadPayloadSplitPipe,
                                                 IoReadPayloadMergedPipe);
@@ -85,23 +135,22 @@ void testbench_kernel(RawPayloadPack* testpattern_device_0, RawPayloadPack* test
                                                  SmForwardPayloadPipe);
 #endif
 
-  hls_thread_local hls::task done_count_task(doneCountKernel, IoInCountPipe, IoResultCountPipe, IoPayloadCountPipe,
-                                             SmPayloadSafePipe, NfPayloadSafePipe, IoDoneCountPipe,
-                                             IoPayloadDoneCountPipe);
   hls_thread_local hls::task sm_task(sm_kernel, SmInputPayloadPipe, SmResultMetaPipe);
 
   hls_thread_local hls::task sm2nf_task(sm2nfKernel, SmForwardPayloadPipe, SmResultMetaPipe, NfInputPayloadPipe,
-                                        NfInputMetaPipe, SmPayloadSafePipe, NfForwardPayloadPipe);
+                                        NfInputMetaPipe, SmPayloadSafePipe, NfForwardPayloadPipe, SmSafePayloadCount);
 
   hls_thread_local hls::task nf_task(nf_kernel, NfInputPayloadPipe, NfInputMetaPipe, NfResultMetaPipe);
 
   hls_thread_local hls::task nf2host_task(nf2hostKernel, NfForwardPayloadPipe, NfResultMetaPipe, HostPayloadPipe,
-                                          HostMetaPipe, NfPayloadSafePipe);
+                                          HostMetaPipe, NfPayloadSafePipe, NfSafePayloadCount);
 
-  hls_thread_local hls::task result_sink_task(resultSinkKernel, HostMetaPipe, IoBurstWritePipe, IoDoneCountPipe,
-                                              IoResultCountPipe);
+  hls_thread_local hls::task result_sink_task(resultSinkKernel, HostMetaPipe, IoBurstWritePipe, resultDone,
+                                              resultCount);
 
-  payloadWriteKernel(payload_sink_device, -1, true, -1, HostPayloadPipe, IoPayloadCountPipe, IoPayloadDoneCountPipe);
+  hls_thread_local hls::task payload_sink_task(payloadSinkKernel, HostPayloadPipe, OverflowPipe,
+                                               IoBurstPayloadWritePipe, sinkPayloadCount, payloadDone);
 
+  payloadWriteKernel(payload_sink_device, -1, true, -1, IoBurstPayloadWritePipe);
   resultWriteKernel(trace_device, skipWrite, buffer_size, IoBurstWritePipe);
 }

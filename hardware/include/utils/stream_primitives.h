@@ -93,16 +93,19 @@ void flagger(hls::stream<TRidInFlit> &InPipe, hls::stream<TRidOutFlit> &OutPipe,
 // Steers payload flits to a "match" or "safe" path based on the steering bit sent by the flagger
 template <typename TPayload>
 void steerPayload(hls::stream<BOOL> &SteerPipe, hls::stream<TPayload> &InPipe, hls::stream<TPayload> &MatchPipe,
-                  hls::stream<TPayload> &SafePipe) {
+                  hls::stream<TPayload> &SafePipe, count_directio_t &SafePayloadCount) {
 #pragma HLS INTERFACE mode = ap_ctrl_none port = return
 #pragma HLS INTERFACE mode = axis port = SteerPipe
 #pragma HLS INTERFACE mode = axis port = InPipe
 #pragma HLS INTERFACE mode = axis port = MatchPipe
 #pragma HLS INTERFACE mode = axis port = SafePipe
+#pragma HLS INTERFACE mode = s_axilite port = SafePayloadCount
 
   BOOL eop = false;
   BOOL flagged = false;
   BOOL first = true;
+
+  uint32_t safe_payload_count = 0;
 
   while (true) {
 #pragma HLS PIPELINE II = 1
@@ -119,6 +122,7 @@ void steerPayload(hls::stream<BOOL> &SteerPipe, hls::stream<TPayload> &InPipe, h
           MatchPipe.write(inPayload);
         } else {
           SafePipe.write(inPayload);
+          safe_payload_count += inPayload.eop;
         }
       }
       eop = inPayload.eop && valid;
@@ -126,6 +130,8 @@ void steerPayload(hls::stream<BOOL> &SteerPipe, hls::stream<TPayload> &InPipe, h
         first = true;
       }
     }
+
+    SafePayloadCount.write(safe_payload_count);
   }
 }
 

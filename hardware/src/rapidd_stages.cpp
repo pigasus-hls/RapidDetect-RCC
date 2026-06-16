@@ -200,7 +200,8 @@ void copyPayloadFlit(NfpmPayloadFlit &dest, MspmPayloadFlit &src, UINT offset) {
 
 void sm2nfKernel(hls::stream<MspmPayloadFlit> &PayloadInPipe, hls::stream<SmResultMetaFlit> &RidMetaInPipe,
                  hls::stream<NfpmPayloadFlit> &PayloadOutPipe, hls::stream<NfInputMetaFlit> &RidMetaOutPipe,
-                 hls::stream<MspmPayloadFlit> &PayloadSafePipe, hls::stream<NfpmPayloadFlit> &PayloadForwardPipe) {
+                 hls::stream<MspmPayloadFlit> &PayloadSafePipe, hls::stream<NfpmPayloadFlit> &PayloadForwardPipe,
+                 count_directio_t &SafePayloadCount) {
 #pragma HLS INTERFACE mode = ap_ctrl_none port = return
 #pragma HLS INTERFACE mode = axis port = PayloadInPipe
 #pragma HLS INTERFACE mode = axis port = RidMetaInPipe
@@ -208,6 +209,7 @@ void sm2nfKernel(hls::stream<MspmPayloadFlit> &PayloadInPipe, hls::stream<SmResu
 #pragma HLS INTERFACE mode = axis port = RidMetaOutPipe
 #pragma HLS INTERFACE mode = axis port = PayloadSafePipe
 #pragma HLS INTERFACE mode = axis port = PayloadForwardPipe
+#pragma HLS INTERFACE mode = s_axilite port = SafePayloadCount
 
   hls_thread_local hls::stream<BOOL, DFLT_PIPE_DEPTH> SteeringPipe("SteeringPipe");
   hls_thread_local hls::stream<MspmPayloadFlit, DFLT_PIPE_DEPTH> PayloadMatchPipe("PayloadMatchPipe");
@@ -217,7 +219,7 @@ void sm2nfKernel(hls::stream<MspmPayloadFlit> &PayloadInPipe, hls::stream<SmResu
       flagger<SmResultMetaFlit, NfInputMetaFlit, SM_RESULT_WIDTH, (SM_EXPAND_OVERLOADED != 0)>, RidMetaInPipe,
       RidMetaOutPipe, SteeringPipe);
   hls_thread_local hls::task steer_payload_task(steerPayload<MspmPayloadFlit>, SteeringPipe, PayloadInPipe,
-                                                PayloadMatchPipe, PayloadSafePipe);
+                                                PayloadMatchPipe, PayloadSafePipe, SafePayloadCount);
   hls_thread_local hls::task downshift_payload_task(
       payloadDownshift<MspmPayloadFlit, MSPM_UNROLL, NfpmPayloadFlit, NFPM_UNROLL>, PayloadMatchPipe,
       PayloadDownshiftPipe);
@@ -227,31 +229,33 @@ void sm2nfKernel(hls::stream<MspmPayloadFlit> &PayloadInPipe, hls::stream<SmResu
 
 void nf2hostKernel(hls::stream<NfpmPayloadFlit> &PayloadInPipe, hls::stream<NfResultMetaFlit> &RidMetaInPipe,
                    hls::stream<NfpmPayloadFlit> &PayloadOutPipe, hls::stream<NfResultMetaFlit> &RidMetaOutPipe,
-                   hls::stream<NfpmPayloadFlit> &PayloadSafePipe) {
+                   hls::stream<NfpmPayloadFlit> &PayloadSafePipe, count_directio_t &SafePayloadCount) {
 #pragma HLS INTERFACE mode = ap_ctrl_none port = return
 #pragma HLS INTERFACE mode = axis port = PayloadInPipe
 #pragma HLS INTERFACE mode = axis port = RidMetaInPipe
 #pragma HLS INTERFACE mode = axis port = PayloadOutPipe
 #pragma HLS INTERFACE mode = axis port = RidMetaOutPipe
 #pragma HLS INTERFACE mode = axis port = PayloadSafePipe
+#pragma HLS INTERFACE mode = s_axilite port = SafePayloadCount
 
   hls_thread_local hls::stream<BOOL, DFLT_PIPE_DEPTH> SteeringPipe("SteeringPipe");
 
   hls_thread_local hls::task flagger_task(flagger<NfResultMetaFlit, NfResultMetaFlit, NF_RESULT_WIDTH, false>,
                                           RidMetaInPipe, RidMetaOutPipe, SteeringPipe);
   hls_thread_local hls::task steer_payload_task(steerPayload<NfpmPayloadFlit>, SteeringPipe, PayloadInPipe,
-                                                PayloadOutPipe, PayloadSafePipe);
+                                                PayloadOutPipe, PayloadSafePipe, SafePayloadCount);
 }
 
 void smSteerPayloadKernel(hls::stream<MspmPayloadFlit> &PayloadInPipe, hls::stream<SmResultMetaFlit> &RidMetaInPipe,
                           hls::stream<MspmPayloadFlit> &PayloadMatchPipe, hls::stream<MspmPayloadFlit> &PayloadSafePipe,
-                          hls::stream<SmResultMetaFlit> &RidMetaOutPipe) {
+                          hls::stream<SmResultMetaFlit> &RidMetaOutPipe, count_directio_t &SafePayloadCount) {
 #pragma HLS INTERFACE mode = ap_ctrl_none port = return
 #pragma HLS INTERFACE mode = axis port = PayloadInPipe
 #pragma HLS INTERFACE mode = axis port = RidMetaInPipe
 #pragma HLS INTERFACE mode = axis port = PayloadMatchPipe
 #pragma HLS INTERFACE mode = axis port = PayloadSafePipe
 #pragma HLS INTERFACE mode = axis port = RidMetaOutPipe
+#pragma HLS INTERFACE mode = s_axilite port = SafePayloadCount
 
   hls_thread_local hls::stream<BOOL, DFLT_PIPE_DEPTH> SteeringPipe("SteeringPipe");
 
@@ -259,5 +263,5 @@ void smSteerPayloadKernel(hls::stream<MspmPayloadFlit> &PayloadInPipe, hls::stre
       flagger<SmResultMetaFlit, SmResultMetaFlit, SM_RESULT_WIDTH, (SM_EXPAND_OVERLOADED != 0)>, RidMetaInPipe,
       RidMetaOutPipe, SteeringPipe);
   hls_thread_local hls::task steer_payload_task(steerPayload<MspmPayloadFlit>, SteeringPipe, PayloadInPipe,
-                                                PayloadMatchPipe, PayloadSafePipe);
+                                                PayloadMatchPipe, PayloadSafePipe, SafePayloadCount);
 }

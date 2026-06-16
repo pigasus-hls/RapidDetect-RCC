@@ -98,6 +98,11 @@ struct PayloadWritePack {
   PAYLOAD_WORD words[HOST_PAYLOAD_WIDTH];
 };
 
+struct PayloadWritePackFlit {
+  PayloadWritePack pack;
+  BOOL done;
+};
+
 // Trace buffer detection entry format; need to be kept in 2-power sized
 struct RidBcnt {
   UINT bcntSeq;     // barrier cnt or mspm packet sequence

@@ -83,11 +83,21 @@ client = vitis.create_client()  # Create a Vitis client to interact with the HLS
 client.set_workspace(path=WORKSPACE)  # Set the workspace directory to './hls_workspace' for managing HLS components
 
 kernels = []
-kernels += ['payloadSourceKernel', 'payloadReadKernel', 'mergePipesKernel', 'resultWriteKernel', 'resultSinkKernel', 'doneCountKernel', 'payloadWriteKernel']
+kernels += ['payloadSourceKernel']
+kernels += ['payloadReadKernel']
+kernels += ['mergePipesKernel']
+kernels += ['resultWriteKernel']
+kernels += ['resultSinkKernel']
+kernels += ['doneCountKernel']
+kernels += ['payloadSinkKernel']
+kernels += ['payloadWriteKernel']
+kernels += ['convertToEthernetKernel']
+kernels += ['fromEthernetKernel']
 kernels += ['fieldTaggerKernel']
 kernels += ['sm_kernel']
 kernels += ['nf_kernel']
-kernels += ['sm2nfKernel', 'nf2hostKernel']
+kernels += ['sm2nfKernel']
+kernels += ['nf2hostKernel']
 for kernel in kernels:
     create_kernels(client, kernel)  # Create HLS components for each kernel specified in the list
     synthesize_kernel(client, kernel)  # Synthesize each kernel to generate the corresponding hardware description

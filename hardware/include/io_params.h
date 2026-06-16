@@ -29,7 +29,7 @@ SOFTWARE.
 #include <mspm/mspm_params.h>
 #include <sm_params.h>
 #include <nf_params.h>
-#include "rapidd_params.h"
+#include <rapidd_params.h>
 
 // Number of payload flits must come in multiples of TBBURST which
 // forms the pipelined inner loop of payloadWordReadKernel();
@@ -59,16 +59,33 @@ SOFTWARE.
 #endif
 #define IO_WRITE_WIDTH (HOST_RESULT_WIDTH * IO_WRITE_MULT)
 
-// NOT USED RIGHT NOW. FOR FUTURE EXPANSION
+// Width of Payload DRAM write for improved bandwidth
 #ifndef PAYLOAD_WRITE_MULT
 #define PAYLOAD_WRITE_MULT (1)
 #endif
 #define PAYLOAD_WRITE_WIDTH (HOST_PAYLOAD_WIDTH * PAYLOAD_WRITE_MULT)
+
+// Ethernet packet size in number of flits
+#ifndef ETH_BURST_SIZE
+#define ETH_BURST_SIZE (32)
+#endif
+
+// Bandwidth measurement period in number of cycles
+#ifndef BUSY_PERIOD_LENGTH
+#define BUSY_PERIOD_LENGTH (1 << 14)
+#endif
+
+// Ethernet output bandwidth throttling period in number of cycles
+#ifndef THROTTLE_PERIOD_LENGTH
+#define THROTTLE_PERIOD_LENGTH (512)
+#endif
 
 #include <iostream>
 [[maybe_unused]] static void ioPrintParameters() {
   const size_t sizeof_ridBcnt = 4 + 2 + ((MSPM_TRACKPOS && NFPM_TRACKPOS) ? 4 : 0);
   std::cout << "IO_READ_BURST=" << IO_READ_BURST << "\n"
             << "IO_READ_MULT=" << IO_READ_MULT << " (" << (IO_READ_MULT * MSPM_UNROLL * MSPM_MASK_WIDTH) << ")\n"
-            << "IO_WRITE_MULT=" << IO_WRITE_MULT << " (" << IO_WRITE_WIDTH * sizeof_ridBcnt << ")\n";
+            << "IO_WRITE_MULT=" << IO_WRITE_MULT << " (" << IO_WRITE_WIDTH * sizeof_ridBcnt << ")\n"
+            << "ETH_BURST_SIZE=" << ETH_BURST_SIZE << "\n"
+            << "BUSY_PERIOD_LENGTH=" << BUSY_PERIOD_LENGTH << "\n";
 }

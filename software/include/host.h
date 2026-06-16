@@ -44,7 +44,16 @@ SOFTWARE.
 #define HBM_BUNDLE1_ADDRESS (0x44ULL)
 
 // Address for kernel control axilite interfaces
-#define SOURCE_ADDRESS (0x2400ULL)
-#define RULES_ADDRESS (0x2800ULL)
-#define PAYLOAD_WRITE_ADDRESS (0x3000ULL)
+#define ETH_CONTROL_ADDRESS         (0x01000000ULL)
+#define ETH_STATS_ADDRESS           (0x01010000ULL)
+#define NFSAFE_STATS_ADDRESS        (0x01020000ULL)
+#define SOURCE_ADDRESS              (0x01030000ULL)
+#define PAYLOAD_SINK_STATS_ADDRESS  (0x01040000ULL)
+#define PAYLOAD_WRITE_ADDRESS       (0x01050000ULL)
+#define SINK_STATS_ADDRESS          (0x01060000ULL)
+#define RULES_ADDRESS               (0x01070000ULL)
+#define SMSAFE_STATS_ADDRESS        (0x01080000ULL)
+
 #define RESET_GPIO_ADDRESS (0x2C00ULL)
+
+#include <dcmac_common.h>

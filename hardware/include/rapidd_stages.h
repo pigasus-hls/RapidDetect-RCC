@@ -80,13 +80,14 @@ void fieldTaggerKernel(hls::stream<PayloadWordPack> &PayloadInPipe, hls::stream<
 // Connect the outputs of SM to the NF kernel, converting the SM result format to NFPM input format
 void sm2nfKernel(hls::stream<MspmPayloadFlit> &PayloadInPipe, hls::stream<SmResultMetaFlit> &RidMetaInPipe,
                  hls::stream<NfpmPayloadFlit> &PayloadOutPipe, hls::stream<NfInputMetaFlit> &RidMetaOutPipe,
-                 hls::stream<MspmPayloadFlit> &PayloadSafePipe, hls::stream<NfpmPayloadFlit> &PayloadForwardPipe);
+                 hls::stream<MspmPayloadFlit> &PayloadSafePipe, hls::stream<NfpmPayloadFlit> &PayloadForwardPipe,
+                 count_directio_t &SafePayloadCount);
 
 void nf2hostKernel(hls::stream<NfpmPayloadFlit> &PayloadInPipe, hls::stream<NfResultMetaFlit> &RidMetaInPipe,
                    hls::stream<NfpmPayloadFlit> &PayloadOutPipe, hls::stream<NfResultMetaFlit> &RidMetaOutPipe,
-                   hls::stream<NfpmPayloadFlit> &PayloadSafePipe);
+                   hls::stream<NfpmPayloadFlit> &PayloadSafePipe, count_directio_t &SafePayloadCount);
 
 // Steer payloads based on SM matching results
 void smSteerPayloadKernel(hls::stream<MspmPayloadFlit> &PayloadInPipe, hls::stream<SmResultMetaFlit> &RidMetaInPipe,
                           hls::stream<MspmPayloadFlit> &PayloadMatchPipe, hls::stream<MspmPayloadFlit> &PayloadSafePipe,
-                          hls::stream<SmResultMetaFlit> &RidMetaOutPipe);
+                          hls::stream<SmResultMetaFlit> &RidMetaOutPipe, count_directio_t &SafePayloadCount);

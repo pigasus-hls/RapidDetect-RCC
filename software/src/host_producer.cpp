@@ -23,7 +23,7 @@ SOFTWARE.
 ******************************************************************************/
 
 /**
- * Executes host side code to interact with the FPGA component of RapidDetect and communicated with Hyperscan
+ * Executes host side code to interact with the FPGA component of RapidDetect and communicate with Hyperscan
  *
  * This includes:
  * - Setting up shared memory and synchronization primitives to communicate with Hyperscan
@@ -56,6 +56,8 @@ SOFTWARE.
 #include <shm_config.h>
 #include <host.h>
 #include <qdma_helpers.h>
+#include <rapidd_helpers.h>
+#include <dcmac_common.h>
 
 #undef SKIP_PAYLOAD_WRITE
 #define SKIP_PAYLOAD_WRITE (0)
@@ -68,6 +70,15 @@ SOFTWARE.
 #define C_ADDRESS (0x604ULL)
 #define B_ADDRESS (0x607ULL)
 
+char c2h_queue[] = C2H_QUEUE;
+char h2c_queue[] = H2C_QUEUE;
+
+// Using BUS, DEVICE, FUNCTION as hex strings
+const unsigned int bus = strtoul(BUS, NULL, 16);
+const unsigned int device = strtoul(DEVICE, NULL, 16);
+const unsigned int function = strtoul(FUNCTION, NULL, 16);
+const unsigned int pf = ((bus << 12) | (device << 4) | (function));
+
 // Shared memory collaterals
 using namespace boost::interprocess;
 
@@ -78,21 +89,84 @@ typedef std::array<std::uint64_t, BUFFER_SIZE> array;
 // its values from the shared_memory segment
 typedef bounded_buffer<array, QUEUE_SIZE> BoundedBuffer;
 
+struct CmdArgs {
+  double throttle = 1.0;
+  char *trace_file = nullptr;
+  int num_threads = THREAD_COUNT;
+};
+
+CmdArgs parse_arguments(int argc, char *argv[]) {
+  CmdArgs args;
+  for (int i = 1; i < argc; ++i) {
+    std::string arg = argv[i];
+    if (arg == "-f" || arg == "--file") {
+      if (i + 1 < argc) {
+        args.trace_file = argv[++i];
+      } else {
+        std::cerr << "Error: " << arg << " requires a file path argument." << std::endl;
+        exit(1);
+      }
+    } else if (arg == "-t" || arg == "--throughput") {
+      if (i + 1 < argc) {
+        char *endptr = nullptr;
+        args.throttle = std::strtod(argv[++i], &endptr);
+        if (endptr == argv[i] || *endptr != '\0') {
+          std::cerr << "Error: invalid throughput value: " << argv[i] << std::endl;
+          exit(1);
+        }
+      } else {
+        std::cerr << "Error: " << arg << " requires a fractional value argument." << std::endl;
+        exit(1);
+      }
+    } else if (arg == "-n" || arg == "--threads") {
+      if (i + 1 < argc) {
+        args.num_threads = std::stoi(argv[++i]);
+      } else {
+        std::cerr << "Error: " << arg << " requires an integer threads argument." << std::endl;
+        exit(1);
+      }
+    } else {
+      // Fallback: check if it's a double/float (throttle), integer (num_threads), or string (trace_file)
+      char *endptr = nullptr;
+      double val = std::strtod(argv[i], &endptr);
+      if (endptr != argv[i] && *endptr == '\0') {
+        std::string val_str = argv[i];
+        if (val_str.find('.') == std::string::npos) {
+          args.num_threads = (int)val;
+        } else {
+          args.throttle = val;
+        }
+      } else {
+        args.trace_file = argv[i];
+      }
+    }
+  }
+
+  if (args.throttle < 0.0 || args.throttle > 1.0) {
+    std::cerr << "Warning: throttle parameter must be between 0 and 1. Capping value." << std::endl;
+    if (args.throttle < 0.0) args.throttle = 0.0;
+    if (args.throttle > 1.0) args.throttle = 1.0;
+  }
+
+  return args;
+}
+
 int main(int argc, char *argv[]) {
-  // Check if trace has been provided, error out if not since this version requires a trace input to run
+  // Parse command line arguments using the helper function
+  CmdArgs args = parse_arguments(argc, argv);
+  double throttle = args.throttle;
+  char *trace_file = args.trace_file;
+  int num_threads = args.num_threads;
+
   BOOL traceInputMode = 0;
-  if (argc > 1) {
+  if (trace_file != nullptr) {
     traceInputMode = 1;
   } else {
-    std::cout << "Usage: " << argv[0] << " <trace.json> [num_threads]" << std::endl;
+    std::cout << "Usage: " << argv[0] << " -f <trace.json> [-t throttle] [-n num_threads]" << std::endl;
     exit(1);
   }
 
-  int num_threads = THREAD_COUNT;
-  if (argc == 3) {
-    num_threads = std::stoi(argv[2]);
-    std::cout << "Using the user provided " << num_threads << " threads" << std::endl;
-  }
+  std::cout << "Using " << num_threads << " threads" << std::endl;
 
   // Setup shared memory
 
@@ -118,25 +192,11 @@ int main(int argc, char *argv[]) {
 
   unsigned int read_val = 0;
 
-  char c2h_queue[] = C2H_QUEUE;
-  char h2c_queue[] = H2C_QUEUE;
-  // Using BUS, DEVICE, FUNCTION as hex strings
-  unsigned int bus = strtoul(BUS, NULL, 16);
-  unsigned int device = strtoul(DEVICE, NULL, 16);
-  unsigned int function = strtoul(FUNCTION, NULL, 16);
-  unsigned int pf = ((bus << 12) | (device << 4) | (function));
+  reset_procedure(0, pf);
+  reset_procedure(1, pf);
 
   // Reset IPs by writing to the AXI GPIO generating the reset for the RapidDetect design
-  qdma_register_read(0, pf, 2, RESET_GPIO_ADDRESS, &read_val);
-  std::cout << "Resetting RapidDetect..." << std::endl;
-  qdma_register_write(0, pf, 2, RESET_GPIO_ADDRESS, 0x0, &read_val);
-  std::cout << "After writing 0x0 to CSR 0x" << std::hex << RESET_GPIO_ADDRESS << ", CSR 0x" << RESET_GPIO_ADDRESS
-            << " = 0x" << read_val << std::dec << std::endl;
-  sleep(1);
-  qdma_register_write(0, pf, 2, RESET_GPIO_ADDRESS, 0x1, &read_val);
-  std::cout << "After writing 0x1 to CSR 0x" << std::hex << RESET_GPIO_ADDRESS << ", CSR 0x" << RESET_GPIO_ADDRESS
-            << " = 0x" << read_val << std::dec << std::endl;
-  std::cout << "Reset Complete" << std::endl;
+  reset_rapidd_design(pf);
 
   /////////////////////////////////////////////////////////////////////////////
   // Start RapidDetect
@@ -144,7 +204,7 @@ int main(int argc, char *argv[]) {
 
   // Allocate test pattern buffers
   StripedVector<RawPayloadPack, IO_HBM_NUM_CHANNELS, MSPM_MASK_WIDTH * MSPM_UNROLL / IO_HBM_NUM_CHANNELS> traceBuffer;
-  UINT totalTraceSize = loadRawTraceInput(traceBuffer, argv[1]);
+  UINT totalTraceSize = loadRawTraceInput(traceBuffer, trace_file);
 
   // Allocate host memory for trace results
   RidBcntPack *trace_host;
@@ -177,106 +237,44 @@ int main(int argc, char *argv[]) {
   // send_data(h2c_queue, HBM_BUNDLE1_ADDRESS << 32, totalTraceSize * IO_READ_BURSTSZ / IO_HBM_NUM_CHANNELS,
   //           (char *)traceBuffer.getChannelVector(1).data());
 
-  /////////////////////////////
-  // Setup the source kernel //
-  /////////////////////////////
-
-  // Write first testpattern memory address to CSR registers (HBM_BUNDLE0_ADDRESS)
-  std::cout << "\nSetting up payload source kernel..." << std::endl;
-  qdma_register_write(0, pf, 2, SOURCE_ADDRESS + 0x10, 0x0, &read_val);
-  std::cout << "Wrote lower 32 bits of input memory address (channel 0) to CSR 0x" << std::hex
-            << (SOURCE_ADDRESS + 0x10) << " = 0x" << read_val << std::dec << std::endl;
-  qdma_register_write(0, pf, 2, SOURCE_ADDRESS + 0x14, HBM_BUNDLE0_ADDRESS, &read_val);
-  std::cout << "Wrote upper 32 bits of input memory address (channel 0) to CSR 0x" << std::hex
-            << (SOURCE_ADDRESS + 0x14) << " = 0x" << read_val << std::dec << std::endl;
-
-  // Write second testpattern memory address to CSR registers (HBM_BUNDLE1_ADDRESS)
-  qdma_register_write(0, pf, 2, SOURCE_ADDRESS + 0x1C, 0x0, &read_val);
-  std::cout << "Wrote lower 32 bits of input memory address (channel 1) to CSR 0x" << std::hex
-            << (SOURCE_ADDRESS + 0x1C) << " = 0x" << read_val << std::dec << std::endl;
-  qdma_register_write(0, pf, 2, SOURCE_ADDRESS + 0x20, HBM_BUNDLE1_ADDRESS, &read_val);
-  std::cout << "Wrote upper 32 bits of input memory address (channel 1) to CSR 0x" << std::hex
-            << (SOURCE_ADDRESS + 0x20) << " = 0x" << read_val << std::dec << std::endl;
-
-  // Write totalTraceSize (count) parameter to CSR register
-  qdma_register_write(0, pf, 2, SOURCE_ADDRESS + 0x28, totalTraceSize, &read_val);
-  std::cout << "Wrote trace length to CSR 0x" << std::hex << (SOURCE_ADDRESS + 0x28) << " = 0x" << read_val << std::dec
-            << std::endl;
-
-  //////////////////////////////////
-  // Setup the rules write kernel //
-  //////////////////////////////////
-
-  // Write trace_device memory address to CSR registers (A_ADDRESS)
-  std::cout << "\nSetting up result sink kernel..." << std::endl;
-  qdma_register_write(0, pf, 2, RULES_ADDRESS + 0x10, 0x0, &read_val);
-  std::cout << "Wrote lower 32 bits of rule results memory address to CSR 0x" << std::hex << (RULES_ADDRESS + 0x10)
-            << " = 0x" << read_val << std::dec << std::endl;
-  qdma_register_write(0, pf, 2, RULES_ADDRESS + 0x14, B_ADDRESS, &read_val);
-  std::cout << "Wrote upper 32 bits of rule results memory address to CSR 0x" << std::hex << (RULES_ADDRESS + 0x14)
-            << " = 0x" << read_val << std::dec << std::endl;
-
-  // Set skipWrite based on SKIP_RULES_WRITE macro
-  qdma_register_write(0, pf, 2, RULES_ADDRESS + 0x1C, SKIP_RULES_WRITE ? 1 : 0, &read_val);
-  std::cout << "Wrote skip flag to CSR 0x" << std::hex << (RULES_ADDRESS + 0x1C) << " = 0x" << read_val << std::dec
-            << std::endl;
-
-  // Write buffer_size parameter to CSR register
-  qdma_register_write(0, pf, 2, RULES_ADDRESS + 0x24, TRACE_SIZE, &read_val);
-  std::cout << "Wrote rule results size cap to CSR 0x" << std::hex << (RULES_ADDRESS + 0x24) << " = 0x" << read_val
-            << std::dec << std::endl;
-
-  ////////////////////////////////////
-  // Setup the payload write kernel //
-  ////////////////////////////////////
-
-  // Write payload_sink_device memory address to CSR registers (A_ADDRESS)
-  std::cout << "\nSetting up payload write kernel..." << std::endl;
-  qdma_register_write(0, pf, 2, PAYLOAD_WRITE_ADDRESS + 0x10, 0x0, &read_val);
-  std::cout << "Wrote lower 32 bits of payload sink memory address to CSR 0x" << std::hex
-            << (PAYLOAD_WRITE_ADDRESS + 0x10) << " = 0x" << read_val << std::dec << std::endl;
-  qdma_register_write(0, pf, 2, PAYLOAD_WRITE_ADDRESS + 0x14, A_ADDRESS, &read_val);
-  std::cout << "Wrote upper 32 bits of payload sink memory address to CSR 0x" << std::hex
-            << (PAYLOAD_WRITE_ADDRESS + 0x14) << " = 0x" << read_val << std::dec << std::endl;
-
-  // Write count (tick counter - 10 millisecond @ 400MHz) parameter to CSR register
-  qdma_register_write(0, pf, 2, PAYLOAD_WRITE_ADDRESS + 0x1C, 4000000, &read_val);
-  std::cout << "Wrote tick counter limit to CSR 0x" << std::hex << (PAYLOAD_WRITE_ADDRESS + 0x1C) << " = 0x" << read_val
-            << std::dec << std::endl;
-
-  // Set skipWrite based on SKIP_PAYLOAD_WRITE macro
-  qdma_register_write(0, pf, 2, PAYLOAD_WRITE_ADDRESS + 0x24, SKIP_PAYLOAD_WRITE ? 1 : 0, &read_val);
-  std::cout << "Wrote skip flag to CSR 0x" << std::hex << (PAYLOAD_WRITE_ADDRESS + 0x24) << " = 0x" << read_val
-            << std::dec << std::endl;
-
-  // Write max_size parameter to CSR register
-  qdma_register_write(0, pf, 2, PAYLOAD_WRITE_ADDRESS + 0x2C,
-                      totalTraceSize * IO_READ_BURSTSZ / 10 / sizeof(PAYLOAD_WORD), &read_val);
-  std::cout << "Wrote payload output size cap to CSR 0x" << std::hex << (PAYLOAD_WRITE_ADDRESS + 0x2C) << " = 0x"
-            << read_val << std::dec << std::endl;
+  setup_source_kernel(pf, HBM_BUNDLE0_ADDRESS, HBM_BUNDLE1_ADDRESS, totalTraceSize);
+  std::cout << "Using throttle fraction: " << throttle << " (" << (uint32_t)(throttle * THROTTLE_PERIOD_LENGTH) << "/"
+            << THROTTLE_PERIOD_LENGTH << " cycles)" << std::endl;
+  setup_eth_kernel(pf, (uint32_t)(throttle * THROTTLE_PERIOD_LENGTH));
+  setup_rules_kernel(pf, B_ADDRESS, SKIP_RULES_WRITE, TRACE_SIZE);
+  setup_payload_kernel(pf, A_ADDRESS, 4000000, SKIP_PAYLOAD_WRITE,
+                       totalTraceSize * IO_READ_BURSTSZ / 10 / sizeof(PAYLOAD_WORD));
 
   /////////////////////////
   // Run all the kernels //
   /////////////////////////
 
-  unsigned int read_val_source = 0, read_val_sink = 0, read_val_payload = 0;
-  qdma_register_read(0, pf, 2, SOURCE_ADDRESS, &read_val_source);
-  qdma_register_read(0, pf, 2, RULES_ADDRESS, &read_val_sink);
-  qdma_register_read(0, pf, 2, PAYLOAD_WRITE_ADDRESS, &read_val_payload);
-  std::cout << "CSR 0x" << std::hex << SOURCE_ADDRESS << " = 0x" << read_val_source << ", CSR 0x" << RULES_ADDRESS
-            << " = 0x" << read_val_sink << ", CSR 0x" << PAYLOAD_WRITE_ADDRESS << " = 0x" << read_val_payload
-            << std::dec << std::endl;
+  float max_input_throughput = 0, max_pipeline_throughput = 0;
+
+  uint32_t read_val_source = 0, read_val_sink = 0, read_val_payload = 0;
+  uint32_t eth_stats_dropped_count = 0, eth_stats_total_count = 0, eth_stats_in_busy_count = 0,
+           eth_stats_out_busy_count = 0, smsafe_stats_payload_count = 0, nfsafe_stats_payload_count = 0,
+           source_stats_payload_count = 0, sink_stats_payload_count = 0, sink_stats_result_count = 0;
+
+  // Set the done registers to 0 before starting the kernels
+  rapidd_write_reg(pf, PAYLOAD_SINK_STATS_ADDRESS, PAYLOAD_SINK_CTRL_OFFSET, 0);
+  rapidd_write_reg(pf, SINK_STATS_ADDRESS, SINK_CTRL_OFFSET, 0);
+
+  read_val_source = rapidd_read_reg(pf, SOURCE_ADDRESS, AP_CTRL_OFFSET);
+  read_val_sink = rapidd_read_reg(pf, RULES_ADDRESS, AP_CTRL_OFFSET);
+  read_val_payload = rapidd_read_reg(pf, PAYLOAD_WRITE_ADDRESS, AP_CTRL_OFFSET);
+  std::cout << "Kernel status before start - Source: 0x" << std::hex << read_val_source << ", Sink: 0x" << read_val_sink
+            << ", Payload Write: 0x" << read_val_payload << std::dec << std::endl;
+
+  // Start by writing to ap_start for source and sink
+  read_val_source = rapidd_write_reg(pf, RULES_ADDRESS, AP_CTRL_OFFSET, 0x1);
+  read_val_payload = rapidd_write_reg(pf, PAYLOAD_WRITE_ADDRESS, AP_CTRL_OFFSET, 0x1);
 
   // Use chrono to measure execution time
   auto startTime = std::chrono::high_resolution_clock::now();
-  // Start by writing to ap_start for source and sink
-  qdma_register_write(0, pf, 2, SOURCE_ADDRESS, 0x1, &read_val_sink);
-  qdma_register_write(0, pf, 2, RULES_ADDRESS, 0x1, &read_val_source);
-  qdma_register_write(0, pf, 2, PAYLOAD_WRITE_ADDRESS, 0x1, &read_val_payload);
-
-  std::cout << "CSR 0x" << std::hex << SOURCE_ADDRESS << " = 0x" << read_val_source << ", CSR 0x" << RULES_ADDRESS
-            << " = 0x" << read_val_sink << ", CSR 0x" << PAYLOAD_WRITE_ADDRESS << " = 0x" << read_val_payload
-            << std::dec << std::endl;
+  read_val_sink = rapidd_write_reg(pf, SOURCE_ADDRESS, AP_CTRL_OFFSET, 0x1);
+  std::cout << "Kernel status after start - Source: 0x" << std::hex << read_val_source << ", Sink: 0x" << read_val_sink
+            << ", Payload Write: 0x" << read_val_payload << std::dec << std::endl;
 
   // Check if ap_done is high for source and sink
   std::cout << "Waiting for kernels to finish..." << std::endl;
@@ -297,16 +295,18 @@ int main(int argc, char *argv[]) {
   uint8_t currentPayloadBuffer = 0;
   uint64_t PAYLOAD_ADDRESS[] = {A_ADDRESS, C_ADDRESS};
 
-  while (((read_val_source & 0b100) == 0) || ((read_val_sink & 0b100) == 0) || !done) {
+  bool rules_stopped = false, payload_stopped = false;
+  while (!rules_stopped || ((read_val_sink & 0b100) == 0) || !payload_stopped || ((read_val_payload & 0b100) == 0)) {
     // If payload write kernel is "done", wait for the other kernels to finish
     if (!done) {
       // Wait for payload sink to finish
-      while ((read_val_payload & 0b100) == 0) qdma_register_read(0, pf, 2, PAYLOAD_WRITE_ADDRESS, &read_val_payload);
+      while ((read_val_payload & 0b100) == 0)
+        read_val_payload = rapidd_read_reg(pf, PAYLOAD_WRITE_ADDRESS, AP_CTRL_OFFSET);
       currentPayloadBuffer = (currentPayloadBuffer + 1) % 2;
 
       // Immediately start next payload write kernel on the other buffer to overlap execution and data transfer
-      qdma_register_write(0, pf, 2, PAYLOAD_WRITE_ADDRESS + 0x14, PAYLOAD_ADDRESS[currentPayloadBuffer], &read_val);
-      qdma_register_write(0, pf, 2, PAYLOAD_WRITE_ADDRESS, 0x1, &read_val_payload);
+      rapidd_write_reg(pf, PAYLOAD_WRITE_ADDRESS, PAYLOAD_ADDR_H_OFFSET, PAYLOAD_ADDRESS[currentPayloadBuffer]);
+      read_val_payload = rapidd_write_reg(pf, PAYLOAD_WRITE_ADDRESS, AP_CTRL_OFFSET, 0x1);
 
       // Read how many bytes were written by the payload write kernel and the done flag
       read_data(c2h_queue, PAYLOAD_ADDRESS[1 - currentPayloadBuffer] << 32, sizeof(PayloadWritePack),
@@ -317,6 +317,7 @@ int main(int argc, char *argv[]) {
                 (payload_host[0].words[0] >> 32) * sizeof(PAYLOAD_WORD) + 1024, (char *)payload_host);
 
       uint64_t payload_index = PAYLOAD_WRITE_WIDTH;
+      std::string current_log_line;
       // Transfer the data into the shared memory buffers
       while (payload_index - PAYLOAD_WRITE_WIDTH < (payload_host[0].words[0] >> 32)) {
         // If current_index exceeds buffer size, push the buffer to the queue and move to the next buffer
@@ -333,6 +334,7 @@ int main(int argc, char *argv[]) {
 
           // Reset reading indices to beginning of last read line
           payload_index -= line_length;
+          current_log_line.clear();
 
           // Reset indices for new buffer
           line_length = 0;
@@ -354,7 +356,7 @@ int main(int argc, char *argv[]) {
         //                    .words[(payload_index - 1) % PAYLOAD_WRITE_WIDTH] >>
         //                (byte_idx * 8)) &
         //               0xFF;
-        //   output_logfile << byte;
+        //   current_log_line += byte;
         // }
 
         // Check for end of line ('\n') at the MSB of the uint64_t
@@ -365,6 +367,9 @@ int main(int argc, char *argv[]) {
           start_index = current_index;
           current_index++;
           event_index++;
+
+          // output_logfile << current_log_line;
+          // current_log_line.clear();
         }
 
         if (done && (payload_index - PAYLOAD_WRITE_WIDTH >= (payload_host[0].words[0] >> 32))) {
@@ -379,12 +384,53 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    // Read the status of the source and rule result sink kernels to check if they are done
-    qdma_register_read(0, pf, 2, SOURCE_ADDRESS, &read_val_source);
-    qdma_register_read(0, pf, 2, RULES_ADDRESS, &read_val_sink);
+    // Read the status of the source,  rule result sink and payload write kernels to check if they are done
+    read_val_source = rapidd_read_reg(pf, SOURCE_ADDRESS, AP_CTRL_OFFSET);
+    read_val_sink = rapidd_read_reg(pf, RULES_ADDRESS, AP_CTRL_OFFSET);
+    read_val_payload = rapidd_read_reg(pf, PAYLOAD_WRITE_ADDRESS, AP_CTRL_OFFSET);
+
+    eth_stats_dropped_count = rapidd_read_reg(pf, ETH_STATS_ADDRESS, ETH_STATS_DROPPED_OFFSET);
+    eth_stats_in_busy_count = rapidd_read_reg(pf, ETH_STATS_ADDRESS, ETH_STATS_IN_BUSY_OFFSET);
+    eth_stats_out_busy_count = rapidd_read_reg(pf, ETH_STATS_ADDRESS, ETH_STATS_OUT_BUSY_OFFSET);
+
+    source_stats_payload_count = rapidd_read_reg(pf, SOURCE_ADDRESS, SOURCE_PAYLOAD_CNT_OFFSET);
+    smsafe_stats_payload_count = rapidd_read_reg(pf, SMSAFE_STATS_ADDRESS, STATS_PAYLOAD_CNT_OFFSET);
+    nfsafe_stats_payload_count = rapidd_read_reg(pf, NFSAFE_STATS_ADDRESS, STATS_PAYLOAD_CNT_OFFSET);
+    sink_stats_result_count = rapidd_read_reg(pf, SINK_STATS_ADDRESS, SINK_RESULT_CNT_OFFSET);
+    sink_stats_payload_count = rapidd_read_reg(pf, PAYLOAD_SINK_STATS_ADDRESS, PAYLOAD_SINK_STATS_OFFSET);
+
+    max_input_throughput = std::max(max_input_throughput, (float)eth_stats_in_busy_count / BUSY_PERIOD_LENGTH);
+    max_pipeline_throughput = std::max(max_pipeline_throughput, (float)eth_stats_out_busy_count / BUSY_PERIOD_LENGTH);
+
+    // std::cout << "Source payload count: " << source_stats_payload_count << ", Eth dropped: " <<
+    // eth_stats_dropped_count
+    //           << ", Eth in busy: " << eth_stats_in_busy_count << ", Eth out busy: " << eth_stats_out_busy_count
+    //           << ", SmSafe payload count: " << smsafe_stats_payload_count
+    //           << ", NfSafe payload count: " << nfsafe_stats_payload_count
+    //           << ", Sink result count: " << sink_stats_result_count
+    //           << ", Sink payload count: " << sink_stats_payload_count << std::endl;
+
+    // Are all the packets that went into the system accounted for at the payload sink?
+    // [BUG] Sometimes a fragment of a packet repeats into the overflow pipe, greater than lets the code complete
+    if (!payload_stopped && ((read_val_source & 0b100) != 0) &&
+        (source_stats_payload_count <=
+         smsafe_stats_payload_count + nfsafe_stats_payload_count + sink_stats_payload_count)) {
+      std::cout << "Stopping payload write kernel..." << std::endl;
+      rapidd_write_reg(pf, PAYLOAD_SINK_STATS_ADDRESS, PAYLOAD_SINK_CTRL_OFFSET, 1);
+      payload_stopped = true;
+    }
+
+    // Are all the packets that went into the system accounted for at the rules sink?
+    if (!rules_stopped && ((read_val_source & 0b100) != 0) &&
+        (source_stats_payload_count - eth_stats_dropped_count ==
+         smsafe_stats_payload_count + nfsafe_stats_payload_count + sink_stats_result_count)) {
+      std::cout << "Stopping rules kernel..." << std::endl;
+      rapidd_write_reg(pf, SINK_STATS_ADDRESS, SINK_CTRL_OFFSET, 1);
+      rules_stopped = true;
+    }
   }
   auto endTime = std::chrono::high_resolution_clock::now();
-  std::cout << std::endl;
+  std::cout << "Kernels stopped.\n" << std::endl;
 
   // Send sentinel (empty buffer) to each buffer to signal end
   for (int i = 0; i < num_threads; ++i) {
@@ -395,9 +441,43 @@ int main(int argc, char *argv[]) {
 
   // Get elapsed time in seconds
   double elapsedTime = std::chrono::duration<double>(endTime - startTime).count();
-  // print execution time and read bandwidth in Gbps
-  std::cout << "Execution time: " << elapsedTime * 1E3 << " ms" << std::endl;
-  std::cout << "Throughput: " << 8 * (totalTraceSize * IO_READ_BURSTSZ / 1E9) / (elapsedTime) << " Gbps" << std::endl;
+
+  // Print execution time and bandwidth in Gbps
+  std::cout << "\nExecution time: " << elapsedTime * 1E3 << " ms" << std::endl;
+  std::ios::fmtflags f(std::cout.flags());
+  std::streamsize p = std::cout.precision();
+  std::cout << std::fixed << std::setprecision(2);
+  std::cout << std::left << std::setw(24) << "End-to-End Throughput:" << std::right << std::setw(8)
+            << 8 * (totalTraceSize * IO_READ_BURSTSZ / 1E9) / (elapsedTime) << " Gbps" << std::endl;
+  std::cout << std::left << std::setw(24) << "Ethernet Throughput:" << std::right << std::setw(8)
+            << max_input_throughput * (MSPM_UNROLL * 8 * 8) * 400E6 / 1E9 << " Gbps" << std::endl;
+  std::cout << std::left << std::setw(24) << "Pipeline Throughput:" << std::right << std::setw(8)
+            << max_pipeline_throughput * (MSPM_UNROLL * 8 * 8) * 400E6 / 1E9 << " Gbps" << std::endl;
+  std::cout << std::endl;
+
+  // Print packet count stats
+  std::cout << std::left << std::setw(30) << "Total Packets Sent:" << std::right << std::setw(10)
+            << source_stats_payload_count << std::endl;
+  std::cout << std::left << std::setw(30) << "Packets Dropped at Ethernet:" << std::right << std::setw(10)
+            << eth_stats_dropped_count << " (" << std::right << std::setw(6)
+            << (source_stats_payload_count > 0 ? 100.0f * eth_stats_dropped_count / source_stats_payload_count : 0.0f)
+            << "%)" << std::endl;
+  std::cout << std::left << std::setw(30) << "Packets Safe after MSPM:" << std::right << std::setw(10)
+            << smsafe_stats_payload_count << " (" << std::right << std::setw(6)
+            << (source_stats_payload_count > 0 ? 100.0f * smsafe_stats_payload_count / source_stats_payload_count
+                                               : 0.0f)
+            << "%)" << std::endl;
+  std::cout << std::left << std::setw(30) << "Packets Safe after CPM:" << std::right << std::setw(10)
+            << nfsafe_stats_payload_count << " (" << std::right << std::setw(6)
+            << (source_stats_payload_count > 0 ? 100.0f * nfsafe_stats_payload_count / source_stats_payload_count
+                                               : 0.0f)
+            << "%)" << std::endl;
+  std::cout << std::left << std::setw(30) << "Packets Sent to CPU:" << std::right << std::setw(10)
+            << sink_stats_payload_count << " (" << std::right << std::setw(6)
+            << (source_stats_payload_count > 0 ? 100.0f * sink_stats_payload_count / source_stats_payload_count : 0.0f)
+            << "%)" << std::endl;
+  std::cout.flags(f);
+  std::cout.precision(p);
 
   return 0;
 }

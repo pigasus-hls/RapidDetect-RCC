@@ -48,8 +48,8 @@ DMA-UTILS_OBJS := $(QDMA_DIR)/dma-utils/dmautils.o \
 				  $(QDMA_DIR)/dma-utils/dmactl.o \
 				  $(QDMA_DIR)/dma-utils/dmactl_reg.o
 HOST_OBJS = $(DMA-UTILS_OBJS)
-HOST_SRCS := src/host.cpp ../hardware/src/test/testbench.cpp ../hardware/src/test/testinit.cpp src/qdma_helpers.cpp
-HOST_PRODUCER_SRCS := src/host_producer.cpp ../hardware/src/test/testbench.cpp ../hardware/src/test/testinit.cpp src/qdma_helpers.cpp
+HOST_SRCS := src/host.cpp src/dcmac_common.cpp src/rapidd_helpers.cpp ../hardware/src/test/testbench.cpp ../hardware/src/test/testinit.cpp src/qdma_helpers.cpp
+HOST_PRODUCER_SRCS := src/host_producer.cpp ../hardware/src/test/testbench.cpp ../hardware/src/test/testinit.cpp src/qdma_helpers.cpp src/dcmac_common.cpp src/rapidd_helpers.cpp
 
 ifneq ($(CROSS_COMPILE_FLAG),)
 	CC=$(CROSS_COMPILE_FLAG)gcc
