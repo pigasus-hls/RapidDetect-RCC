@@ -32,16 +32,19 @@ proc do_aved_build {} {
   # Generate all output products
   generate_target all [get_files "${bd_name}.bd"]
 
-  # Write xsa
-  write_hw_platform -force -fixed -minimal "${build_dir}/${design_name}.xsa"
 
   # Write design bd out (optional)
   file mkdir ${build_dir}/bd_gen
   write_bd_tcl -force -no_ip_version -hier_blks [get_bd_cells /] "${build_dir}/bd_gen/create_bd_design_final.tcl"
 
-  # Run all synthesis and implementation steps
+  # Run synthesis steps
   launch_runs synth_1 -jobs 8
   wait_on_runs synth_1
+
+  # Write xsa (we need to do this after synthesis because of the new RTL modules)
+  write_hw_platform -force -fixed -minimal "${build_dir}/${design_name}.xsa"
+
+  # Run implementation steps
   launch_runs impl_1 -to_step write_device_image -jobs 8
   wait_on_runs impl_1
 

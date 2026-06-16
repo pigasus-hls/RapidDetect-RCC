@@ -106,7 +106,7 @@ void testbench_kernel(RawPayloadPack *testpattern_device_0, RawPayloadPack *test
   hls_thread_local hls::stream<NfpmPayloadFlit, DFLT_PIPE_DEPTH> OverflowPipe("OverflowPipe");
   hls_thread_local hls::stream<NfResultMetaFlit, DFLT_PIPE_DEPTH> HostMetaPipe("HostMetaPipe");
   hls_thread_local hls::stream<RidBcntFlit, DFLT_PIPE_DEPTH> IoBurstWritePipe("IoBurstWritePipe");
-  hls_thread_local hls::stream<PayloadWritePack, DFLT_PIPE_DEPTH> IoBurstPayloadWritePipe("IoBurstPayloadWritePipe");
+  hls_thread_local hls::stream<PayloadWritePackFlit, DFLT_PIPE_DEPTH> IoBurstPayloadWritePipe("IoBurstPayloadWritePipe");
 
   hls_thread_local count_directio_t sourcePayloadCount;
   hls_thread_local count_directio_t sinkPayloadCount;
