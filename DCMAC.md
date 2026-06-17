@@ -71,6 +71,8 @@ Generates a 7-bit wide output (`usr_reset`) mapping to individual transceiver re
 - **Bit 2 (`usr_reset[2]`)** &rarr; `INTF0_rst_tx_datapath_in`: Reset TX datapath only.
 - **Bit 3 (`usr_reset[3]`)** &rarr; `INTF0_rst_rx_pll_and_datapath_in`: Reset RX PLL and datapath.
 - **Bit 4 (`usr_reset[4]`)** &rarr; `INTF0_rst_rx_datapath_in`: Reset RX datapath only.
+- **Bit 5 (`usr_reset[5]`)** &rarr; `usr_reset_tx`: Reset user TX path (AXI-Stream interface).
+- **Bit 6 (`usr_reset[6]`)** &rarr; `usr_reset_rx`: Reset user RX path (AXI-Stream interface).
 
 #### 2. Transceiver Tuning and Parameter Control (`axi_gpio_gt_control`)
 Output register `gt_control` (32 bits wide) sets standard GTM physical layer transmission values. 
@@ -99,7 +101,7 @@ A 3-bit wide input register mapping physical transceiver lock signals to host re
 - **Bit 1 (`gpio_io_i[1]`)** &larr; `gt_tx_reset_done`: Asserted once TX transceivers lock and initialize successfully.
 - **Bit 2 (`gpio_io_i[2]`)** &larr; `gt_rx_reset_done`: Asserted once RX transceivers lock and align.
 
-The host software polls this status word, waiting for `0b110` (both TX and RX resets complete) before allowing traffic.
+The host software polls this status word, checking for both TX and RX resets before proceeding.
 
 ---
 
@@ -219,7 +221,7 @@ Finally, the receive path is initialized and aligned:
 
 ![Packet Throughput Analysis](./assets/packet_throughput.png)
 
-As shown in the throughput plot, a packet size of exactly 512 bits (64 bytes) yields exactly 50% bandwidth (100 Gbps). This limitation arises because the AXI-Stream segment converter's 1024-bit interface allows only one packet start (SOP) per cycle, leaving half the bus capacity unused for 512-bit packets.
+As shown in the throughput plot, a packet size of 512 bits (64 bytes) yields exactly 50% bandwidth (100 Gbps). This limitation arises because the AXI-Stream segment converter's 1024-bit interface allows only one packet start (SOP) per cycle, leaving half the bus capacity unused for 512-bit packets.
 
 For larger packet sizes, the packetization overhead from the DCMAC is amortized, enabling throughput to approach the full 200 Gbps line rate.
 

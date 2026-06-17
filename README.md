@@ -216,7 +216,7 @@ make -C ../traces
 sudo ./host.x -f ../traces/E5_cadets-deduplicated.json.500k -t 1.0
 ```
 
-Expected performance is ~172Gbps (which includes packetization overhead of splitting the log events at newlines).
+Expected performance is ~197Gbps, look for Pipeline Throughput in the output (end-to-end throughput might be lower because of log event packetization overhead).
 
 > [!TIP]
 > Communicating using QDMA by default requires super-user priviledges. But using udev rules, regular users can gain access to the queues directly. Create a new file as `/etc/udev/rules.d/100-v80.rules` with the line: `ACTION=="add", KERNEL=="qdma01001-MM-*", SUBSYSTEM=="qdma-pf", MODE:="666"` (replace the BBDDF number with the number for the V80 on your machine). This will set the permissions for the queues to 666 when they're created and the host code can be run without sudo.
