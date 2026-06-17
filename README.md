@@ -4,15 +4,22 @@ Contact: [Shashank Obla](https://www.andrew.cmu.edu/user/sobla) (PhD Student at 
 - A Short Paper has also been published in the FCCM 2026 Proceedings and can be found [here](https://www.andrew.cmu.edu/user/sobla/publications/rapidscan-fccm-rcc/).
 - We designed a [3D printed shroud](https://www.andrew.cmu.edu/user/sobla/projects/v80-shroud/) to provide active cooling to the V80 on our desktop workstation! 
 
-Note: This repo is not yet upto date with the DCMAC 200G design demoed at FCCM. Keep your eyes peeled and we'll soon update the repo with the latest Ethernet based design. 
+> [!NOTE]
+> **DCMAC 200G Design:** This branch contains the DCMAC 200G Loopback-based design demoed at FCCM.
+> - For more details on using this capability, see the [DCMAC Description](./DCMAC.md).
+> - If you are looking for the version of the design without DCMAC, it is available on the [`no-dcmac`](https://github.com/pigasus-hls/RapidDetect-RCC/tree/no-dcmac) branch.
 
 RapidDetect is an HLS-based 200Gbps (@400MHz) hardware-accelerated threat detection system for streaming, structured system logs using [Sigma](https://github.com/sigmahq/sigma) rules. This repository, prepared for the FCCM 2026 Reconfigurable Computing Challenge, contains the Vitis HLS based implementation of the full RapidDetect FPGA pipeline.
 
 Inspired by [Pigasus Intrustion Prevention/Detection System](https://www.usenix.org/conference/osdi20/presentation/zhao-zhipeng), RapidDetect opts for a heterogeneous FPGA and CPU architecture for high-throughput, low-latency threat detection in streaming system logs. This version of the system is built for the V80 (occupying < 1 out of 3 SLRs) using AVED as a starting point and QDMA to move data and control information between the host and the FPGA. The Multi-String Pattern Matcher is capable of processing upwards of 10,000 string literals at 200Gbps (currently >4000 literals based on the ~200 Linux Sigma rules). This is followed by the Conjunct Pattern Matcher (CPM) which checks the logs that pass through the MSPM against only the rules that matched in the MSPM. Using a bloom-fliter like fingerprint, the CPM can check for conjunctions (AND) of string literals significantly reducing the false positive rate. 
 
-At a high-level the following diagram captures the system implemented in this repository. HBM is used as a stand-in for future support for streaming inputs directly from the network using ethernet with the FPGA placed as a bump-in-the-wire.
+At a high-level the following diagram captures the system implemented in this repository. The design implements an Ethernet loopback infrastructure using the DCMAC IP block.
 
 ![Block diagram showing various components of the system including the FPGA kernels, memory (DRAM and HBM), CPU side software and the communication channels](./assets/system.png "RapidDetect on V80 System Diagram")
+
+For the loopback ports to function, QSFP ports 1 and 4 on the Versal V80 card as shown below must be connected with a 200G QSFP56 loopback cable.
+
+![Versal V80 Board QSFP Ports](./assets/v80.png "Versal V80 QSFP Ports")
 
 More details on the application and the system can be found in the [System Description](./SYSTEM.md).
 
@@ -61,8 +68,13 @@ hardware
 > [!NOTE]
 > You might have to request access to the site in order to get access to the SMBus IP
 
-> [!IMPORTANT]
-> Building with the SMBus IP also requires the SMBus license from the [Xilinx Product Licensing Site](https://www.xilinx.com/getlicense) once you have access to the Early Access Site
+### Licensing Requirements
+
+Building the design requires valid licenses for the following IPs. Make sure these licenses are enabled on your licensing server or setup appropriately on your local machine (using a Xilinx.lic file):
+
+- **SMBus IP License:** Obtainable from the [Xilinx Product Licensing Site](https://www.xilinx.com/getlicense) once you have access to the Early Access Site.
+- **DCMAC IP License:** Required for the DCMAC 200G IP. You can obtain a license using the **Get License** button on the [AMD DCMAC Product Page](https://www.amd.com/en/products/adaptive-socs-and-fpgas/intellectual-property/dcmac.html).
+
 
 ### Hyperscan Integration
 
@@ -136,7 +148,7 @@ vitis -w ./hls_workspace
 These instructions very closely follow the steps from the [AVED documentation](https://xilinx.github.io/AVED/latest/How-to%2BRebuild%2Ban%2BAVED%2BDesign%2Bfor%2BYourself.html). The scripts have been modified to point to the HLS workspace, create a block design with the RapidDetect IPs connected to AVED and appropriate changes to the build flow to allow for timing closure.
 
 >[!TIP]
->You can change the number of parallel jobs Vivado should use based on your machine's processing power and memory availability. You can find it set to 8 in lines 43 and 45 of the [build tcl script](./hardware/AVED/hw/amd_v80_gen5x8_25.1/src/build_design.tcl) for an 8-core machine with 64GB of DRAM.
+>You can change the number of parallel jobs Vivado should use based on your machine's processing power and memory availability. You can find it set to 8 in lines 41 and 48 of the [build tcl script](./hardware/AVED/hw/amd_v80_gen5x8_25.1/src/build_design.tcl) for an 8-core machine with 64GB of DRAM.
 
 Navigate to the hardware directory and run the build_all.sh script to build the RapidDetect hardware.
 
@@ -197,11 +209,11 @@ make host.x
 sudo ./host.x
 ```
 
-To run a real trace (the provided traces are derived from the [DARPA Transparent Computing Program](https://www.darpa.mil/research/programs/transparent-computing) generated during [Engagement #5](https://github.com/darpa-i2o/transparent-computing)), first unzip the traces in the [traces directory](./traces) and execute the host code as follows:
+To run a real trace (the provided traces are derived from the [DARPA Transparent Computing Program](https://www.darpa.mil/research/programs/transparent-computing) generated during [Engagement #5](https://github.com/darpa-i2o/transparent-computing)), first unzip the traces in the [traces directory](./traces) and execute the host code as follows (where `-t` is the optional throttle parameter between `0.0` and `1.0`):
 
 ```bash
 make -C ../traces
-sudo ./host.x ../traces/E5_cadets-deduplicated.json.500k
+sudo ./host.x -f ../traces/E5_cadets-deduplicated.json.500k -t 1.0
 ```
 
 Expected performance is ~172Gbps (which includes packetization overhead of splitting the log events at newlines).
@@ -213,21 +225,24 @@ Expected performance is ~172Gbps (which includes packetization overhead of split
 
 Make sure the pre-requisites and Hyperscan are installed (including Boost). Edit the [Makefile](./software/Makefile) to point to your installation of Hyperscan and Boost if they deviate from the standard; the Makefile will find Hyperscan if built into hyperscan/build and Boost if installed system wide.
 
-Build the host code as well as the hyperscan consumer code:
+To run the system with Hyperscan integration, a pipeline script [run_pipeline.sh](./software/run_pipeline.sh) is provided to compile the required binaries and run both the producer and consumer processes in a single terminal.
+
+With the FPGA programmed with the bitstream (using the prior instructions), execute the pipeline script as follows:
 
 ```bash
-make host_producer.x
-make hyperscan_consumer.x
+cd software
+# Run with sudo if you haven't set up the udev permissions, or without sudo if udev is configured:
+sudo ./run_pipeline.sh -f <trace_file> -n <num_threads> -t <throttle>
 ```
 
-Open two terminals, one to run the producer and one for the consumer. With the FPGA programmed with the bitstream (using the prior instructions) run the following commands. Use the number of threads based on your machine and make sure its consistent between the two commands.
-
+For example, to run the provided trace:
 ```bash
-# Terminal 1 (run first)
-sudo ./host_producer ../traces/E5_cadets-deduplicated.json.500k <num_threads>
-
-# Terminal 2 (looks for the shared memory region created by the producer)
-sudo ./hyperscan_consumer patterns_full.db <num_threads>
+sudo ./run_pipeline.sh -f ../traces/E5_cadets-deduplicated.json.500k -n <num_threads> -t <throttle>
 ```
 
-You should see a new file [all_detections.log](./software/all_detections.log) which contains the subset of events that passed through both the FPGA and Hyperscan and are flagged as malicious by RapidDetect. The performance of this implementation needs to be tuned to a new machine setup and you might not see the full bandwidth if you do not have enough cores (for this given trace you might need upwards of 24 cores for Hyperscan to handle the rate coming from the FPGA).
+Parameters:
+- `-f <trace_file>`: Path to the input trace file (e.g., `../traces/E5_cadets-deduplicated.json.500k`).
+- `-n <num_threads>`: Number of threads to run (based on your machine).
+- `-t <throttle>`: Throttle parameter between `0.0` and `1.0` to control rate.
+
+After execution is finished, you should see a new file [all_detections.log](./software/all_detections.log) which contains the subset of events that passed through both the FPGA and Hyperscan and are flagged as malicious by RapidDetect. The performance of this implementation needs to be tuned to a new machine setup and you might not see the full bandwidth if you do not have enough cores (for this given trace you might need upwards of 24 cores for Hyperscan to handle the rate coming from the FPGA).
