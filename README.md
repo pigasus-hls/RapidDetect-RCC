@@ -42,11 +42,15 @@ RapidDetect is an ongoing collaboration between [Shashank Obla](https://github.c
 - Python 3.6.8 or later (for AVED)
 - Cmake 3.5.0 or later (for AVED)
 - Vivado and Vitis 2025.1
-- [Alveo Versal Example Design (AVED)](https://xilinx.github.io/AVED/latest/How-to%2Binstall%2Band%2Brun%2Ba%2Bpre-built%2BAVED%2Bdesign%2Bon%2Ban%2BALVEO%2Bcard.html). Make sure you [flash the pre-built design on the V80](https://xilinx.github.io/AVED/latest/AVED+Updating+FPT+Image+in+Flash.html) and install the software side AMI tool using the instructions in the link.
+- AVED Deployment Archive (different from the snapshot of AVED provided in this repository)
+  1. Download the [Deployment Archive](https://account.amd.com/content/dam/account/en/member/v80/amd_v80_gen5x8_25.1_xbtest_stress_20251113.zip)  
+  2. Follow the [instructions](https://xilinx.github.io/AVED/latest/AVED+Installing+the+Deployment+package+onto+the+Host+Server.html) to install the archive on your V80 machine.
+  3. Flash the [pre-built design onto the V80](https://xilinx.github.io/AVED/latest/AVED+Updating+FPT+Image+in+Flash.html)
+  4. To test the environment is setup correctly, run the pre-built AVED design with `xbest` using these [instructions](https://xilinx.github.io/AVED/latest/How-to%2Binstall%2Band%2Brun%2Ba%2Bpre-built%2BAVED%2Bdesign%2Bon%2Ban%2BALVEO%2Bcard.html#testing-aved)
 - [QDMA Linux Drivers](https://github.com/Xilinx/dma_ip_drivers/tree/master/QDMA/linux-kernel) is [submoduled in this repo](./dma_ip_drivers) and needs to be built and installed using the [instructions from AVED](https://xilinx.github.io/AVED/latest/AVED%2BQDMA.html) and the [QDMA Documentation](https://xilinx.github.io/dma_ip_drivers/master/QDMA/linux-kernel/html/build.html). Make sure to install both the kernel drivers and the associated apps using `sudo make install`.
 
 > [!IMPORTANT]
-> Before building the DMA drivers, add the PCIe identifier into table at end of PF section at src/pci_ids.h as described in the [Installing section](https://xilinx.github.io/AVED/latest/AVED%2BQDMA.html#installing)
+> Before building the DMA drivers, add the PCIe identifier into table at end of PF section at src/pci_ids.h as described in the [Installing section](https://xilinx.github.io/AVED/latest/AVED%2BQDMA.html#installing). You must rebuild/reinstall the drivers if you missed this step.
 
 ### IPs for AVED
 
