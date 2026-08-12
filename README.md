@@ -1,6 +1,6 @@
 # RapidDetect on the Versal V80
 
-Contact: [Shashank Obla](https://www.andrew.cmu.edu/user/sobla) (PhD Student at Carnegie Mellon University)  
+Contact: [Shashank Obla](https://shashankov.github.io)   
 - A Short Paper has also been published in the FCCM 2026 Proceedings and can be found [here](https://www.andrew.cmu.edu/user/sobla/publications/rapidscan-fccm-rcc/).
 - We designed a [3D printed shroud](https://www.andrew.cmu.edu/user/sobla/projects/v80-shroud/) to provide active cooling to the V80 on our desktop workstation! 
 
