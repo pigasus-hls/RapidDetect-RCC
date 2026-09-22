@@ -33,3 +33,4 @@ int read_data(char *devname, uint64_t addr, uint64_t size, char *outdata);
 int qdma_register_write(unsigned char is_vf, unsigned int pf, int bar, unsigned long reg, unsigned long value,
                         unsigned int *reg_val);
 int qdma_register_read(unsigned char is_vf, unsigned int pf, int bar, unsigned long reg, unsigned int *reg_val);
+uint64_t qdma_get_bar_size(unsigned int pf, int bar);

@@ -276,7 +276,8 @@ void convertFromEthernetKernel(hls::stream<EthernetFlit> &EthernetInPipe,
 void dropPacketKernel(hls::stream<PayloadWordPack> &PayloadInPipe, hls::stream<PayloadWordPack> &PayloadOutPipe,
                       hls::stream<PayloadWordPack> &OverflowPipe, hls::stream<bool> &CreditPipe,
                       hls::ap_none<uint32_t> &DroppedCount, hls::ap_none<uint32_t> &TotalCount,
-                      hls::ap_none<uint32_t> &InBusyCount, hls::ap_none<uint32_t> &OutBusyCount) {
+                      hls::ap_none<uint32_t> &InBusyCount, hls::ap_none<uint32_t> &OutBusyCount,
+                      hls::ap_none<uint32_t> &OverflowError) {
 #pragma HLS INTERFACE mode = ap_ctrl_none port = return
 #pragma HLS INTERFACE mode = axis port = PayloadInPipe
 #pragma HLS INTERFACE mode = axis port = PayloadOutPipe
@@ -286,6 +287,7 @@ void dropPacketKernel(hls::stream<PayloadWordPack> &PayloadInPipe, hls::stream<P
 #pragma HLS INTERFACE mode = s_axilite port = TotalCount
 #pragma HLS INTERFACE mode = s_axilite port = InBusyCount
 #pragma HLS INTERFACE mode = s_axilite port = OutBusyCount
+#pragma HLS INTERFACE mode = s_axilite port = OverflowError
 
   uint32_t dropped_count_local = 0;
   uint32_t total_count_local = 0;
@@ -294,6 +296,7 @@ void dropPacketKernel(hls::stream<PayloadWordPack> &PayloadInPipe, hls::stream<P
   uint32_t busy_period = 0;
   uint32_t in_busy_count_local = 0;
   uint32_t out_busy_count_local = 0;
+  uint16_t overflow_error_local[2] = {0};
 
   bool drop = false, next_drop = false, new_packet = true;
   uint16_t credits, total_capacity = PayloadOutPipe.capacity();
@@ -319,12 +322,14 @@ void dropPacketKernel(hls::stream<PayloadWordPack> &PayloadInPipe, hls::stream<P
 
       // If not dropping, write to output pipe and decrement credits. If dropping, write to overflow pipe instead
       if (!drop) {
-        PayloadOutPipe.write_nb(wPack);
+        bool success = PayloadOutPipe.write_nb(wPack);
         out_busy_count_local++;
         wrote = true;
+        if (!success) overflow_error_local[0]++;
       } else {
         // If overflow pipe is backpressured we can't do much (numbers will not match so we will be able to detect it)
-        OverflowPipe.write_nb(wPack);
+        bool success = OverflowPipe.write_nb(wPack);
+        if (!success) overflow_error_local[1]++;
       }
 
       // If this flit is end of packet, update counts and reset for next packet
@@ -346,6 +351,7 @@ void dropPacketKernel(hls::stream<PayloadWordPack> &PayloadInPipe, hls::stream<P
     // Write dropped and total counts to AXI registers
     DroppedCount.write(dropped_count_local);
     TotalCount.write(total_count_local);
+    OverflowError.write((overflow_error_local[0] << 16) | overflow_error_local[1]);
 
     if (busy_period == 0) {
       InBusyCount.write(in_busy_count_local);
@@ -385,7 +391,7 @@ void copyPayloadFlit(NfpmPayloadFlit &dest, PayloadWordPack &src, uint8_t offset
 void fromEthernetKernel(hls::stream<EthernetFlit> &EthernetInPipe, hls::stream<PayloadWordPack> &EthernetOutPipe,
                         hls::stream<HostPayloadFlit> &OverflowPipe, hls::ap_none<uint32_t> &DroppedCount,
                         hls::ap_none<uint32_t> &TotalCount, hls::ap_none<uint32_t> &InBusyCount,
-                        hls::ap_none<uint32_t> &OutBusyCount) {
+                        hls::ap_none<uint32_t> &OutBusyCount, hls::ap_none<uint32_t> &OverflowError) {
 #pragma HLS INTERFACE mode = ap_ctrl_none port = return
 #pragma HLS INTERFACE mode = axis port = EthernetInPipe
 #pragma HLS INTERFACE mode = axis port = EthernetOutPipe
@@ -394,6 +400,7 @@ void fromEthernetKernel(hls::stream<EthernetFlit> &EthernetInPipe, hls::stream<P
 #pragma HLS INTERFACE mode = s_axilite port = TotalCount
 #pragma HLS INTERFACE mode = s_axilite port = InBusyCount
 #pragma HLS INTERFACE mode = s_axilite port = OutBusyCount
+#pragma HLS INTERFACE mode = s_axilite port = OverflowError
 
   hls_thread_local hls::stream<PayloadWordPack, DFLT_PIPE_DEPTH> intermediate_parsed("intermediate_parsed");
   hls_thread_local hls::stream<PayloadWordPack, 2048> intermediate_buffer("intermediate_buffer");
@@ -403,7 +410,7 @@ void fromEthernetKernel(hls::stream<EthernetFlit> &EthernetInPipe, hls::stream<P
   hls_thread_local hls::task shim_task(convertFromEthernetKernel, EthernetInPipe, intermediate_parsed);
   hls_thread_local hls::task drop_task(dropPacketKernel, intermediate_parsed, intermediate_buffer,
                                        intermediate_overflow_pipe, credit_pipe, DroppedCount, TotalCount, InBusyCount,
-                                       OutBusyCount);
+                                       OutBusyCount, OverflowError);
   hls_thread_local hls::task passthrough_task(passthroughKernel, intermediate_buffer, EthernetOutPipe, credit_pipe);
   hls_thread_local hls::task payload_downshift_task(
       payloadDownshift<PayloadWordPack, MSPM_UNROLL, HostPayloadFlit, NFPM_UNROLL>, intermediate_overflow_pipe,
@@ -650,8 +657,8 @@ void payloadSinkKernel(hls::stream<HostPayloadFlit> &PayloadInPipe, hls::stream<
   }
 }
 
-void payloadWriteKernel(PayloadWritePack *payload_sink_device, UINT count, BOOL skipWrite, UINT max_size,
-                        hls::stream<PayloadWritePackFlit> &IoBurstPayloadWritePipe) {
+payloadWriteInfo_t payloadWriteKernel(PayloadWritePack *payload_sink_device, UINT count, BOOL skipWrite, UINT max_size,
+                                      hls::stream<PayloadWritePackFlit> &IoBurstPayloadWritePipe) {
 #pragma HLS INTERFACE mode = m_axi port = payload_sink_device bundle = gmem0 depth = 8192
 #pragma HLS INTERFACE mode = s_axilite port = count
 #pragma HLS INTERFACE mode = s_axilite port = skipWrite
@@ -675,23 +682,11 @@ void payloadWriteKernel(PayloadWritePack *payload_sink_device, UINT count, BOOL 
     } else if (num_words_written >= max_size) {
       overflow = true;
     } else if (valid && !done) {
-      payload_sink_device[num_words_written / PAYLOAD_WRITE_WIDTH + 1] = pack_flit.pack;
+      payload_sink_device[num_words_written / PAYLOAD_WRITE_WIDTH] = pack_flit.pack;
       num_words_written += PAYLOAD_WRITE_WIDTH;
     }
   }
 
-  PayloadWritePack pack;
-  for (uint8_t j = 0; j < PAYLOAD_WRITE_WIDTH; j++) {
-#pragma HLS UNROLL
-    pack.words[j] = (PAYLOAD_WORD)(0xFFFFFFFFFFFFFFFF);  // Reset word to all FFs
-  }
-
-  // Write the number of words written
-  if (!skipWrite) {
-    // Store the number of words written at the start of the buffer
-    // Store the done status so that this kernel is not called again
-    // Store the overflow status
-    pack.words[0] = (((PAYLOAD_WORD)num_words_written) << 32) + (done ? 0b010 : 0) + (overflow ? 0b001 : 0);
-  }
-  payload_sink_device[0] = pack;
+  // Return the number of words written and done/overflow status for verification
+  return {num_words_written, overflow, done};
 }

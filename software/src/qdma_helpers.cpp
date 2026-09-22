@@ -138,8 +138,36 @@ void xnl_dump_response(const char *resp) {
   // printf("%s", resp);
 }
 
+uint64_t qdma_get_bar_size(unsigned int pf, int bar) {
+  char path[128];
+  snprintf(path, sizeof(path), "/sys/bus/pci/devices/0000:%02x:%02x.%x/resource", (pf >> 12) & 0xFF, (pf >> 4) & 0x1F,
+           pf & 0x7);
+
+  FILE *fp = fopen(path, "r");
+  if (!fp) return 0;
+
+  uint64_t start = 0, end = 0, flags = 0;
+  for (int i = 0; i <= bar; i++) {
+    if (fscanf(fp, "%lx %lx %lx", &start, &end, &flags) != 3) {
+      fclose(fp);
+      return 0;
+    }
+  }
+  fclose(fp);
+  return (end >= start) ? (end - start + 1) : 0;
+}
+
 int qdma_register_write(unsigned char is_vf, unsigned int pf, int bar, unsigned long reg, unsigned long value,
                         unsigned int *reg_val) {
+  uint64_t bar_sz = qdma_get_bar_size(pf, bar);
+  if (bar_sz > 0 && (reg + sizeof(uint32_t)) > bar_sz) {
+    fprintf(stderr,
+            "[ERROR] Register write at offset 0x%lx exceeds BAR %d size (0x%lx / %lu KB). Aborting to prevent driver "
+            "crash.\n",
+            reg, bar, bar_sz, bar_sz / 1024);
+    exit(EXIT_FAILURE);
+  }
+
   struct xcmd_info xcmd;
   struct xcmd_reg *regcmd;
   int ret;
@@ -164,6 +192,15 @@ int qdma_register_write(unsigned char is_vf, unsigned int pf, int bar, unsigned 
 }
 
 int qdma_register_read(unsigned char is_vf, unsigned int pf, int bar, unsigned long reg, unsigned int *reg_val) {
+  uint64_t bar_sz = qdma_get_bar_size(pf, bar);
+  if (bar_sz > 0 && (reg + sizeof(uint32_t)) > bar_sz) {
+    fprintf(stderr,
+            "[ERROR] Register read at offset 0x%lx exceeds BAR %d size (0x%lx / %lu KB). Aborting to prevent driver "
+            "crash.\n",
+            reg, bar, bar_sz, bar_sz / 1024);
+    exit(EXIT_FAILURE);
+  }
+
   struct xcmd_info xcmd;
   struct xcmd_reg *regcmd;
   int ret;

@@ -24,6 +24,11 @@
 
 import vitis  # Import the Vitis library for High-Level Synthesis (HLS) functionalities
 import os     # Import the os module for interacting with the operating system
+import sys
+import shutil
+import argparse
+import subprocess
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 # Set design parameters for synthesis of 200Gbps design
 CFLAGS = '-DNO_MY_ASSERT=1 -DMSPM_TRACKPOS=1 -DNFPM_TRACKPOS=1 -DMSPM_RESOLVE_CONFLICT=1 -DTEST_SAMEFLOW=0 -DTEST_PREPEND7=0 -DMSPM_UNROLL=8 -DMSPM_CHECKFIELD=1 -DIO_HBM_NUM_CHANNELS=2 -DNFPM_UNROLL=2 -DNFPM_CHECKFIELD=1'
@@ -37,11 +42,41 @@ SRC = 'src/io_stages.cpp src/sm.cpp src/nf.cpp src/mspm/mspm.cpp src/nfpm/nfpm.c
 TESTBENCH_SRC = 'src/test/testbench_kernel.cpp'
 TESTBENCH = 'src/test/testbench.cpp src/test/testinit.cpp src/test/main_hls.cpp'
 
-# Set workspace for HLS components
-WORKSPACE = './hls_workspace'
+# Base directory for HLS workspaces
+WORKSPACE_BASE = './hls_workspace'
 
-# Set HLS Synthesis configuration parameters for all the kernels
-def set_common_config(cfg_file):
+# Directory paths
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+HARDWARE_DIR = os.path.dirname(SCRIPT_DIR)
+
+ALL_KERNELS = [
+    # 'payloadSourceKernel',
+    # 'payloadReadKernel',
+    # 'mergePipesKernel',
+    # 'resultWriteKernel',
+    # 'resultSinkKernel',
+    # 'payloadSinkKernel',
+    'payloadWriteKernel',
+    # 'convertToEthernetKernel',
+    'fromEthernetKernel',
+    # 'fieldTaggerKernel',
+    # 'sm_kernel',
+    # 'nf_kernel',
+    # 'sm2nfKernel',
+    # 'nf2hostKernel'
+]
+
+# Set HLS Synthesis configuration parameters for a kernel
+def set_common_config(cfg_file, kernel_name):
+    comp_dir = os.path.abspath(f"{WORKSPACE_BASE}/{kernel_name}/{kernel_name}")
+
+    # Dynamically compute relative paths from component directory to source files and include dir
+    rel_src_files = [
+        os.path.relpath(os.path.join(HARDWARE_DIR, f), comp_dir)
+        for f in SRC.split()
+    ]
+    rel_include_dir = os.path.relpath(os.path.join(HARDWARE_DIR, "include"), comp_dir)
+
     cfg_file.set_value(key='part', value=FPGA) # Specify the target FPGA part for synthesis
     cfg_file.set_value(section='hls', key='clock', value=str(1/FREQ * 1E3) + 'ns')
     cfg_file.set_value(section='hls', key='vivado.clock', value=str(1/FREQ * 1E3) + 'ns')
@@ -56,49 +91,98 @@ def set_common_config(cfg_file):
     cfg_file.set_value(section='hls', key='sim.O', value='0')
     cfg_file.set_value(section='hls', key='csim.clean', value='1')
 
-    cfg_file.set_values(section='hls', key='syn.file', values=['../../' + file for file in SRC.split()])  # Set the source files for synthesis in the configuration file
+    cfg_file.set_values(section='hls', key='syn.file', values=rel_src_files)
+    cfg_file.set_value(section='hls', key='syn.cflags', value=f'-I{rel_include_dir} ' + CFLAGS)
 
-    cfg_file.set_value(section='hls', key='syn.cflags', value='-I../../include ' + CFLAGS)  # Set the C synthesis flags in the configuration file
+def build_single_kernel_worker(kernel_name):
+    """Executes inside its own vitis process using the pure Vitis Python API."""
+    kernel_ws = os.path.abspath(f"{WORKSPACE_BASE}/{kernel_name}")
+    # Remove existing directory to ensure Vitis initializes a clean, fresh workspace
+    # (prevents 'cannot recognize the workspace version' if stale files exist from previous single-workspace runs)
+    if os.path.exists(kernel_ws):
+        shutil.rmtree(kernel_ws, ignore_errors=True)
+    os.makedirs(kernel_ws, exist_ok=True)
 
-def synthesize_kernel(client, kernel_name):
-    comp = client.get_component(name=kernel_name)  # Get a handle for the specified HLS component
-    comp.run(operation='SYNTHESIS')  # Run the synthesis operation on the component
+    client = vitis.create_client()
+    client.set_workspace(path=kernel_ws)
 
-def create_kernels(client, kernel_name):
-    # Check if the component 'sm_kernel' exists and delete it if it does
-    if os.path.exists(WORKSPACE + '/' + kernel_name):  # Verify if the specified component directory exists
-        client.delete_component(name=kernel_name)  # Delete the existing component to avoid conflicts
+    comp_dir = os.path.join(kernel_ws, kernel_name)
+    if os.path.exists(comp_dir):
+        try:
+            client.delete_component(name=kernel_name)
+        except Exception:
+            pass
 
-    # Create a new HLS component, specifying a configuration file and template
+    # Create component within this kernel's workspace
     comp = client.create_hls_component(name=kernel_name, cfg_file=['hls_config.cfg'], template='empty_hls_component')
-    cfg_file = client.get_config_file(path=WORKSPACE + '/' + kernel_name + '/hls_config.cfg')  # Retrieve the configuration file for the component
-    set_common_config(cfg_file)  # Apply common configuration settings to the configuration file
-    cfg_file.set_value(section='hls', key='syn.top', value=kernel_name)  # Set the top-level function for synthesis in the configuration file
+    cfg_file = client.get_config_file(path=os.path.join(comp_dir, 'hls_config.cfg'))
+    set_common_config(cfg_file, kernel_name)
+    cfg_file.set_value(section='hls', key='syn.top', value=kernel_name)
 
-# Get the directory of the current script
-script_dir = os.path.dirname(os.path.abspath(__file__))  # Get the absolute path of the current script
+    print(f"[{kernel_name}] Starting synthesis in {kernel_ws}...")
+    comp = client.get_component(name=kernel_name)
+    comp.run(operation='SYNTHESIS')
+    print(f"[{kernel_name}] Synthesis completed successfully!")
 
-# Initialize a session with the Vitis library
-client = vitis.create_client()  # Create a Vitis client to interact with the HLS tools
-client.set_workspace(path=WORKSPACE)  # Set the workspace directory to './hls_workspace' for managing HLS components
+    vitis.dispose()
 
-kernels = []
-kernels += ['payloadSourceKernel']
-kernels += ['payloadReadKernel']
-kernels += ['mergePipesKernel']
-kernels += ['resultWriteKernel']
-kernels += ['resultSinkKernel']
-kernels += ['payloadSinkKernel']
-kernels += ['payloadWriteKernel']
-kernels += ['convertToEthernetKernel']
-kernels += ['fromEthernetKernel']
-kernels += ['fieldTaggerKernel']
-kernels += ['sm_kernel']
-kernels += ['nf_kernel']
-kernels += ['sm2nfKernel']
-kernels += ['nf2hostKernel']
-for kernel in kernels:
-    create_kernels(client, kernel)  # Create HLS components for each kernel specified in the list
-    synthesize_kernel(client, kernel)  # Synthesize each kernel to generate the corresponding hardware description
+def launch_kernel_process(kernel_name):
+    """Spawns an independent vitis -s worker process for a single kernel."""
+    script_path = os.path.abspath(__file__)
+    cmd = ["vitis", "-s", script_path, "--worker", kernel_name]
+    print(f"[{kernel_name}] Dispatching worker process...")
+    res = subprocess.run(cmd)
+    return kernel_name, (res.returncode == 0)
 
-vitis.dispose() # Clean up the Vitis client session
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Parallel HLS kernel synthesis for RapidDetect")
+    parser.add_argument("--worker", type=str, default=None, help="Internal: build a single kernel in this process")
+    parser.add_argument("--kernel", type=str, default=None, help="Build only the specified kernel")
+    parser.add_argument("--jobs", type=int, default=None, help="Number of parallel synthesis jobs")
+    args = parser.parse_args()
+
+    # WORKER MODE: Called as a sub-process for a single kernel
+    if args.worker:
+        build_single_kernel_worker(args.worker)
+        sys.exit(0)
+
+    # ORCHESTRATOR MODE:
+    os.makedirs(WORKSPACE_BASE, exist_ok=True)
+
+    if args.kernel:
+        target_kernels = [args.kernel]
+    else:
+        target_kernels = ALL_KERNELS
+
+    # Concurrency limit (3-4 workers avoids OOM on 64GB machine with sm_kernel/nf_kernel)
+    max_workers = args.jobs or int(os.environ.get("HLS_JOBS", min(4, os.cpu_count() or 4)))
+    # Cap workers to number of targets
+    max_workers = min(max_workers, len(target_kernels))
+
+    print(f"============================================================")
+    print(f" RapidDetect HLS Synthesis")
+    print(f" Target Kernels ({len(target_kernels)}): {', '.join(target_kernels)}")
+    print(f" Parallel Jobs: {max_workers}")
+    print(f" Workspaces: {WORKSPACE_BASE}/<kernel_name>/")
+    print(f"============================================================\n")
+
+    failed = []
+    if max_workers == 1:
+        for k in target_kernels:
+            _, success = launch_kernel_process(k)
+            if not success:
+                failed.append(k)
+    else:
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(launch_kernel_process, k): k for k in target_kernels}
+            for future in as_completed(futures):
+                kernel_name, success = future.result()
+                if not success:
+                    failed.append(kernel_name)
+
+    if failed:
+        print(f"\n[ERROR] Synthesis finished with failures in: {failed}")
+        sys.exit(1)
+    else:
+        print(f"\n[SUCCESS] All {len(target_kernels)} kernels synthesized successfully under {WORKSPACE_BASE}/!")
+        sys.exit(0)

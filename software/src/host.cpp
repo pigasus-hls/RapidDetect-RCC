@@ -282,9 +282,11 @@ int main(int argc, char *argv[]) {
     read_val_source = rapidd_read_reg(pf, SOURCE_ADDRESS, AP_CTRL_OFFSET);
 
     eth_stats_dropped_count = rapidd_read_reg(pf, ETH_STATS_ADDRESS, ETH_STATS_DROPPED_OFFSET);
-    // eth_stats_total_count = rapidd_read_reg(pf, ETH_STATS_ADDRESS, ETH_STATS_TOTAL_OFFSET);
+    eth_stats_total_count = rapidd_read_reg(pf, ETH_STATS_ADDRESS, ETH_STATS_TOTAL_OFFSET);
     eth_stats_in_busy_count = rapidd_read_reg(pf, ETH_STATS_ADDRESS, ETH_STATS_IN_BUSY_OFFSET);
     eth_stats_out_busy_count = rapidd_read_reg(pf, ETH_STATS_ADDRESS, ETH_STATS_OUT_BUSY_OFFSET);
+    uint32_t overflow_error = rapidd_read_reg(pf, ETH_STATS_ADDRESS, ETH_STATS_ERROR_OFFSET);
+    uint16_t errors[2] = {overflow_error & 0xFFFF, overflow_error >> 16};
 
     source_stats_payload_count = rapidd_read_reg(pf, SOURCE_ADDRESS, SOURCE_PAYLOAD_CNT_OFFSET);
     smsafe_stats_payload_count = rapidd_read_reg(pf, SMSAFE_STATS_ADDRESS, STATS_PAYLOAD_CNT_OFFSET);
@@ -295,14 +297,16 @@ int main(int argc, char *argv[]) {
     max_input_throughput = std::max(max_input_throughput, (float)eth_stats_in_busy_count / BUSY_PERIOD_LENGTH);
     max_pipeline_throughput = std::max(max_pipeline_throughput, (float)eth_stats_out_busy_count / BUSY_PERIOD_LENGTH);
 
-    // std::cout << "Source payload count: " << source_stats_payload_count << ", Eth dropped: " <<
-    // eth_stats_dropped_count
-    //           << ", Eth in busy: " << eth_stats_in_busy_count
-    //           << ", Eth out busy: " << eth_stats_out_busy_count << ", SmSafe payload count: " <<
-    //           smsafe_stats_payload_count
-    //           << ", NfSafe payload count: " << nfsafe_stats_payload_count
-    //           << ", Sink result count: " << sink_stats_result_count
-    //           << ", Sink payload count: " << sink_stats_payload_count << std::endl;
+    // usleep(1);
+    std::cout << "Source payload count: " << source_stats_payload_count << ", Eth dropped: " << eth_stats_dropped_count
+              << ", Eth in busy: " << eth_stats_in_busy_count << ", Eth total: " << eth_stats_total_count
+              << ", Eth errors: [" << errors[0] << ", " << errors[1] << "]"
+              << ", Eth out busy: " << eth_stats_out_busy_count
+              << ", SmSafe payload count: " << smsafe_stats_payload_count
+              << ", NfSafe payload count: " << nfsafe_stats_payload_count
+              << ", Sink result count: " << sink_stats_result_count
+              << ", Sink payload count: " << sink_stats_payload_count;
+    std::cout << "\n";
   }
   auto endTime = std::chrono::high_resolution_clock::now();
   std::cout << "Stopping kernels..." << std::endl;

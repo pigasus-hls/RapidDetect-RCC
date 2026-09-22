@@ -302,24 +302,34 @@ int main(int argc, char *argv[]) {
       // Wait for payload sink to finish
       while ((read_val_payload & 0b100) == 0)
         read_val_payload = rapidd_read_reg(pf, PAYLOAD_WRITE_ADDRESS, AP_CTRL_OFFSET);
+
+      // Read return status from kernel registers (num_words_written, overflow, done)
+      uint32_t num_words_written = rapidd_read_reg(pf, PAYLOAD_WRITE_ADDRESS, PAYLOAD_RETURN_OFFSET);
+      uint32_t return_flags = rapidd_read_reg(pf, PAYLOAD_WRITE_ADDRESS, PAYLOAD_RETURN_FLAGS_OFFSET);
+      bool overflow = return_flags & 0x1;
+      done = (return_flags >> 8) & 0x1;
+      if (overflow) {
+        std::cerr << "Payload write kernel overflow detected!" << std::endl;
+      }
+
       currentPayloadBuffer = (currentPayloadBuffer + 1) % 2;
 
       // Immediately start next payload write kernel on the other buffer to overlap execution and data transfer
-      rapidd_write_reg(pf, PAYLOAD_WRITE_ADDRESS, PAYLOAD_ADDR_H_OFFSET, PAYLOAD_ADDRESS[currentPayloadBuffer]);
-      read_val_payload = rapidd_write_reg(pf, PAYLOAD_WRITE_ADDRESS, AP_CTRL_OFFSET, 0x1);
+      if (!done) {
+        rapidd_write_reg(pf, PAYLOAD_WRITE_ADDRESS, PAYLOAD_ADDR_H_OFFSET, PAYLOAD_ADDRESS[currentPayloadBuffer]);
+        read_val_payload = rapidd_write_reg(pf, PAYLOAD_WRITE_ADDRESS, AP_CTRL_OFFSET, 0x1);
+      }
 
-      // Read how many bytes were written by the payload write kernel and the done flag
-      read_data(c2h_queue, PAYLOAD_ADDRESS[1 - currentPayloadBuffer] << 32, sizeof(PayloadWritePack),
-                (char *)payload_host);
-      done = (payload_host[0].words[0] & 0b10) >> 1;
       // Read the payload results back from the FPGA to the host
-      read_data(c2h_queue, PAYLOAD_ADDRESS[1 - currentPayloadBuffer] << 32,
-                (payload_host[0].words[0] >> 32) * sizeof(PAYLOAD_WORD) + 1024, (char *)payload_host);
+      if (num_words_written > 0) {
+        read_data(c2h_queue, PAYLOAD_ADDRESS[1 - currentPayloadBuffer] << 32,
+                  num_words_written * sizeof(PAYLOAD_WORD) + 1024, (char *)payload_host);
+      }
 
-      uint64_t payload_index = PAYLOAD_WRITE_WIDTH;
+      uint64_t payload_index = 0;
       std::string current_log_line;
       // Transfer the data into the shared memory buffers
-      while (payload_index - PAYLOAD_WRITE_WIDTH < (payload_host[0].words[0] >> 32)) {
+      while (payload_index < num_words_written) {
         // If current_index exceeds buffer size, push the buffer to the queue and move to the next buffer
         if (current_index > BUFFER_SIZE - 1) {
           total_bytes += BUFFER_SIZE * sizeof(uint64_t);
@@ -372,7 +382,7 @@ int main(int argc, char *argv[]) {
           // current_log_line.clear();
         }
 
-        if (done && (payload_index - PAYLOAD_WRITE_WIDTH >= (payload_host[0].words[0] >> 32))) {
+        if (done && (payload_index >= num_words_written)) {
           // End of file reached, write final line length and break
           total_bytes += BUFFER_SIZE * sizeof(uint64_t);
           if (start_index < BUFFER_SIZE) {
@@ -392,6 +402,16 @@ int main(int argc, char *argv[]) {
     eth_stats_dropped_count = rapidd_read_reg(pf, ETH_STATS_ADDRESS, ETH_STATS_DROPPED_OFFSET);
     eth_stats_in_busy_count = rapidd_read_reg(pf, ETH_STATS_ADDRESS, ETH_STATS_IN_BUSY_OFFSET);
     eth_stats_out_busy_count = rapidd_read_reg(pf, ETH_STATS_ADDRESS, ETH_STATS_OUT_BUSY_OFFSET);
+    uint32_t eth_stats_total_count = rapidd_read_reg(pf, ETH_STATS_ADDRESS, ETH_STATS_TOTAL_OFFSET);
+    uint32_t overflow_error_count = rapidd_read_reg(pf, ETH_STATS_ADDRESS, ETH_STATS_ERROR_OFFSET);
+    uint16_t overflow_error_local[2] = {overflow_error_count >> 16, overflow_error_count & 0xFFFF};
+
+    if (overflow_error_count) {
+      std::cerr << "\033[31m[ERROR] Overflow error detected in Ethernet kernel!\033[0m\n\033[31m[ERROR] Reduce "
+                   "throttle rate for correctness.\033[0m"
+                << std::endl;
+      exit(1);
+    }
 
     source_stats_payload_count = rapidd_read_reg(pf, SOURCE_ADDRESS, SOURCE_PAYLOAD_CNT_OFFSET);
     smsafe_stats_payload_count = rapidd_read_reg(pf, SMSAFE_STATS_ADDRESS, STATS_PAYLOAD_CNT_OFFSET);
@@ -405,6 +425,8 @@ int main(int argc, char *argv[]) {
     // std::cout << "Source payload count: " << source_stats_payload_count << ", Eth dropped: " <<
     // eth_stats_dropped_count
     //           << ", Eth in busy: " << eth_stats_in_busy_count << ", Eth out busy: " << eth_stats_out_busy_count
+    //           << ", Eth total: " << eth_stats_total_count
+    //           << ", Eth overflow errors: [" << overflow_error_local[0] << ", " << overflow_error_local[1] << "]"
     //           << ", SmSafe payload count: " << smsafe_stats_payload_count
     //           << ", NfSafe payload count: " << nfsafe_stats_payload_count
     //           << ", Sink result count: " << sink_stats_result_count

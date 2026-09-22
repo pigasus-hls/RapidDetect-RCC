@@ -57,7 +57,7 @@ void convertFromEthernetKernel(hls::stream<EthernetFlit> &EthernetInPipe, hls::s
 void fromEthernetKernel(hls::stream<EthernetFlit> &EthernetInPipe, hls::stream<PayloadWordPack> &EthernetOutPipe,
                         hls::stream<HostPayloadFlit> &OverflowPipe, hls::ap_none<uint32_t> &DroppedCount,
                         hls::ap_none<uint32_t> &TotalCount, hls::ap_none<uint32_t> &InBusyCount,
-                        hls::ap_none<uint32_t> &OutBusyCount);
+                        hls::ap_none<uint32_t> &OutBusyCount, hls::ap_none<uint32_t> &OverflowError);
 
 // Combine payload and mark streams into packet payload stream to feed MSPM injestion pipe
 void payloadSourceKernel(hls::stream<PayloadWordPack> &PayloadInPipe, hls::stream<MspmPayloadFlit> &PayloadOutPipe,
@@ -76,5 +76,11 @@ void resultSinkKernel(hls::stream<HostMetaFlit> &RidMetaInPipe, hls::stream<RidB
 void payloadSinkKernel(hls::stream<HostPayloadFlit> &PayloadInPipe, hls::stream<HostPayloadFlit> &OverflowPipe,
                        hls::stream<PayloadWritePackFlit> &IoBurstPayloadWritePipe, count_directio_t &PayloadCount,
                        done_directio_t &Done);
-void payloadWriteKernel(PayloadWritePack *payload_sink_device, UINT count, BOOL skipWrite, UINT max_size,
-                        hls::stream<PayloadWritePackFlit> &IoBurstPayloadWritePipe);
+
+struct payloadWriteInfo_t {
+  UINT num_words_written;
+  bool overflow;
+  bool done;
+};
+payloadWriteInfo_t payloadWriteKernel(PayloadWritePack *payload_sink_device, UINT count, BOOL skipWrite, UINT max_size,
+                                      hls::stream<PayloadWritePackFlit> &IoBurstPayloadWritePipe);

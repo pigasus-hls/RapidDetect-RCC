@@ -56,6 +56,12 @@ rm -f producer.log consumer.log
 cleanup() {
     echo ""
     echo "Cleaning up processes..."
+    if [ ! -z "$TAIL_PRODUCER_PID" ]; then
+        kill $TAIL_PRODUCER_PID 2>/dev/null
+    fi
+    if [ ! -z "$TAIL_CONSUMER_PID" ]; then
+        kill $TAIL_CONSUMER_PID 2>/dev/null
+    fi
     if [ ! -z "$PRODUCER_PID" ]; then
         kill $PRODUCER_PID 2>/dev/null
     fi
@@ -107,8 +113,39 @@ TAIL_PRODUCER_PID=$!
 tail -n 20 -f consumer.log | sed 's/^/[CONSUMER] /' &
 TAIL_CONSUMER_PID=$!
 
-# Wait for the producer and consumer to finish
-wait $PRODUCER_PID $CONSUMER_PID 2>/dev/null
+# Wait for the first process to terminate
+wait -n -p FINISHED_PID $PRODUCER_PID $CONSUMER_PID
+STATUS=$?
+
+if [ "$FINISHED_PID" -eq "$PRODUCER_PID" ]; then
+    if [ $STATUS -ne 0 ]; then
+        echo "Error: Producer exited with status $STATUS. Terminating consumer..."
+        kill $CONSUMER_PID 2>/dev/null
+        exit $STATUS
+    else
+        # Producer succeeded, wait for consumer to finish processing sentinels
+        wait $CONSUMER_PID 2>/dev/null
+        CONSUMER_STATUS=$?
+        if [ $CONSUMER_STATUS -ne 0 ]; then
+            echo "Error: Consumer exited with status $CONSUMER_STATUS."
+            exit $CONSUMER_STATUS
+        fi
+    fi
+elif [ "$FINISHED_PID" -eq "$CONSUMER_PID" ]; then
+    if [ $STATUS -ne 0 ]; then
+        echo "Error: Consumer exited with status $STATUS. Terminating producer..."
+        kill $PRODUCER_PID 2>/dev/null
+        exit $STATUS
+    else
+        # Consumer exited, wait for producer
+        wait $PRODUCER_PID 2>/dev/null
+        PRODUCER_STATUS=$?
+        if [ $PRODUCER_STATUS -ne 0 ]; then
+            echo "Error: Producer exited with status $PRODUCER_STATUS."
+            exit $PRODUCER_STATUS
+        fi
+    fi
+fi
 
 # Clean up tails
 kill $TAIL_PRODUCER_PID 2>/dev/null
