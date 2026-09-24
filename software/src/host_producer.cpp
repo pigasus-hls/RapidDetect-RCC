@@ -52,7 +52,6 @@ SOFTWARE.
 #include <thread>
 #include <string>
 
-#include <bounded_buffer.h>
 #include <shm_config.h>
 #include <host.h>
 #include <qdma_helpers.h>
@@ -81,13 +80,6 @@ const unsigned int pf = ((bus << 12) | (device << 4) | (function));
 
 // Shared memory collaterals
 using namespace boost::interprocess;
-
-// Define the array type to be stored in shared memory (raw bytes)
-typedef std::array<std::uint64_t, BUFFER_SIZE> array;
-
-// Alias a bounded_buffer that uses the STL-like allocator so that allocates
-// its values from the shared_memory segment
-typedef bounded_buffer<array, QUEUE_SIZE> BoundedBuffer;
 
 struct CmdArgs {
   double throttle = 1.0;
@@ -178,15 +170,28 @@ int main(int argc, char *argv[]) {
 
   // Create a shared memory object.
   std::cout << "Creating shared memory object called \"MySharedMemory\"" << std::endl;
-  managed_shared_memory segment(create_only, "MySharedMemory", (QUEUE_SIZE * sizeof(array) + 2048) * num_threads);
+  size_t shm_size = sizeof(SharedMemoryLayout) + 1024 * 1024;
+  managed_shared_memory segment(create_only, "MySharedMemory", shm_size);
 
-  // Set size
-  std::cout << "Setting up " << num_threads << " BoundedBuffers, each with size " << QUEUE_SIZE << std::endl;
-  std::vector<BoundedBuffer *> buffers;
-  for (int i = 0; i < num_threads; ++i) {
-    std::string buf_name = "BoundedBuffer" + std::to_string(i);
-    BoundedBuffer *bb = segment.construct<BoundedBuffer>(buf_name.c_str())();
-    buffers.push_back(bb);
+  std::cout << "Setting up SharedMemoryLayout (Payload Ring: " << (PAYLOAD_RING_SIZE / (1024 * 1024))
+            << " MB, Descriptor Ring: " << DESC_RING_SIZE << " slots)" << std::endl;
+  SharedMemoryLayout *shm = segment.construct<SharedMemoryLayout>("SharedMemoryLayout")();
+  if (!shm) {
+    std::cerr << "Failed to construct SharedMemoryLayout in shared memory" << std::endl;
+    exit(1);
+  }
+
+  // Initialize control block
+  shm->ctrl.desc_tail = 0;
+  shm->ctrl.payload_tail = 0;
+  shm->ctrl.is_done = false;
+  shm->ctrl.desc_head = 0;
+  shm->ctrl.payload_head = 0;
+  shm->ctrl.next_ticket = 0;
+  shm->ctrl.retired_ticket = 0;
+  for (size_t i = 0; i < MAX_INFLIGHT_CLAIMS; ++i) {
+    shm->ctrl.retire_tracker[i].end_monotonic_offset = 0;
+    shm->ctrl.retire_tracker[i].completed = false;
   }
   sleep(5);
 
@@ -214,14 +219,7 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
-  // Allocate host memory for payload results
-  PayloadWritePack *payload_host;
-  // Assume 10x reduction in total bits sent by MSPM
-  posix_memalign((void **)&payload_host, 64, totalTraceSize * IO_READ_BURSTSZ / 10);
-  if (payload_host == nullptr) {
-    std::cerr << "Failed to allocate host memory for payload_host" << std::endl;
-    exit(1);
-  }
+
 
   // Send the test pattern to the FPGA for each HBM bundle being used (2 here) - in 0.25GB chunks
   std::cout << "\nTransferring test pattern to FPGA..." << std::endl;
@@ -286,14 +284,13 @@ int main(int argc, char *argv[]) {
   // }
 
   BOOL done = false;
-  int buf_idx = 0;
-  uint64_t line_length = 0;
-  uint64_t start_index = 0, current_index = 1;
-  auto current_buffer = buffers[buf_idx]->peek_front();
   uint64_t total_bytes = 0;
-  uint64_t event_index = 0;
+  uint32_t event_index = 0;
   uint8_t currentPayloadBuffer = 0;
   uint64_t PAYLOAD_ADDRESS[] = {A_ADDRESS, C_ADDRESS};
+  uint64_t leftover_words = 0;
+  std::vector<PacketDesc> local_descs;
+  local_descs.reserve(DESC_RING_SIZE);
 
   bool rules_stopped = false, payload_stopped = false;
   while (!rules_stopped || ((read_val_sink & 0b100) == 0) || !payload_stopped || ((read_val_payload & 0b100) == 0)) {
@@ -320,76 +317,86 @@ int main(int argc, char *argv[]) {
         read_val_payload = rapidd_write_reg(pf, PAYLOAD_WRITE_ADDRESS, AP_CTRL_OFFSET, 0x1);
       }
 
-      // Read the payload results back from the FPGA to the host
+      // Read the payload results directly into shared memory (zero-copy)
       if (num_words_written > 0) {
+        uint64_t burst_bytes = num_words_written * sizeof(PAYLOAD_WORD);
+        uint64_t max_descriptors = (burst_bytes + MIN_PACKET_SIZE - 1) / MIN_PACKET_SIZE;
+        uint64_t leftover_bytes = leftover_words * sizeof(uint64_t);
+
+        uint64_t write_offset = 0;
+        uint32_t burst_monotonic_start = 0;
+
+        // 1. Reserve slice under mutex (held only for microseconds!)
+        {
+          boost::unique_lock<boost::interprocess::interprocess_mutex> lock(shm->ctrl.mutex);
+          shm->ctrl.not_full.wait(lock, [&]() {
+            uint64_t in_flight_desc = shm->ctrl.desc_tail - shm->ctrl.desc_head;
+            uint64_t in_flight_bytes = shm->ctrl.payload_tail - shm->ctrl.payload_head;
+            uint64_t cur_offset = shm->ctrl.payload_tail % PAYLOAD_RING_SIZE;
+            uint64_t pad = (cur_offset + burst_bytes > PAYLOAD_RING_SIZE)
+                               ? (PAYLOAD_RING_SIZE - cur_offset + leftover_bytes)
+                               : 0;
+            return (in_flight_desc + max_descriptors <= DESC_RING_SIZE) &&
+                   (in_flight_bytes + burst_bytes + pad <= PAYLOAD_RING_SIZE);
+          });
+
+          // Non-splitting ring wrap: if burst would cross PAYLOAD_RING_SIZE, pad and wrap to 0
+          write_offset = shm->ctrl.payload_tail % PAYLOAD_RING_SIZE;
+          if (write_offset + burst_bytes > PAYLOAD_RING_SIZE) {
+            uint64_t pad_bytes = PAYLOAD_RING_SIZE - write_offset;
+            if (leftover_words > 0) {
+              uint64_t old_leftover_offset =
+                  (write_offset + PAYLOAD_RING_SIZE - leftover_bytes) % PAYLOAD_RING_SIZE;
+              std::memcpy(&shm->payload[0], &shm->payload[old_leftover_offset], leftover_bytes);
+            }
+            shm->ctrl.payload_tail += (pad_bytes + leftover_bytes);
+            write_offset = leftover_bytes;
+          }
+
+          burst_monotonic_start = shm->ctrl.payload_tail;
+          shm->ctrl.payload_tail += burst_bytes;
+        } // Unlock mutex! Consumers can claim and retire concurrently during PCIe DMA!
+
+        // 2. Direct DMA into shared memory ring buffer! (Lock-free PCIe DMA)
         read_data(c2h_queue, PAYLOAD_ADDRESS[1 - currentPayloadBuffer] << 32,
-                  num_words_written * sizeof(PAYLOAD_WORD) + 1024, (char *)payload_host);
-      }
+                  burst_bytes, (char *)&shm->payload[write_offset]);
+        total_bytes += burst_bytes;
 
-      uint64_t payload_index = 0;
-      std::string current_log_line;
-      // Transfer the data into the shared memory buffers
-      while (payload_index < num_words_written) {
-        // If current_index exceeds buffer size, push the buffer to the queue and move to the next buffer
-        if (current_index > BUFFER_SIZE - 1) {
-          total_bytes += BUFFER_SIZE * sizeof(uint64_t);
+        // 3. Flit-stride boundary scan in-place directly on shm->payload (Lock-free)
+        local_descs.clear();
+        const uint64_t *burst_words = reinterpret_cast<const uint64_t *>(&shm->payload[write_offset]);
+        uint64_t pkt_start_word = 0;
+        for (uint64_t w = PAYLOAD_WRITE_WIDTH - 1; w < num_words_written; w += PAYLOAD_WRITE_WIDTH) {
+          uint64_t word_val = burst_words[w];
+          if (((word_val >> 56) & 0xFF) == '\n') {
+            uint32_t pkt_len_words = (w + 1) - pkt_start_word + leftover_words;
+            uint32_t pkt_len_bytes = pkt_len_words * sizeof(uint64_t);
+            uint32_t pkt_offset = (write_offset + pkt_start_word * sizeof(uint64_t) + PAYLOAD_RING_SIZE -
+                                   leftover_bytes) %
+                                  PAYLOAD_RING_SIZE;
+            uint32_t pkt_monotonic_end = burst_monotonic_start + (w + 1) * sizeof(uint64_t);
 
-          // Write line length at start index
-          if (start_index < BUFFER_SIZE) {
-            (*current_buffer)[start_index] = 0;
+            local_descs.push_back({
+                .offset = pkt_offset,
+                .length = pkt_len_bytes,
+                .event_index = event_index++,
+                .monotonic_end = pkt_monotonic_end
+            });
+            pkt_start_word = w + 1;
+            leftover_words = 0;
+            leftover_bytes = 0;
           }
-          buffers[buf_idx]->push_front();
-          // Move to next buffer
-          buf_idx = (buf_idx + 1) % num_threads;
-
-          // Reset reading indices to beginning of last read line
-          payload_index -= line_length;
-          current_log_line.clear();
-
-          // Reset indices for new buffer
-          line_length = 0;
-          start_index = 0;
-          current_index = 1;
-          current_buffer = buffers[buf_idx]->peek_front();
         }
+        leftover_words += (num_words_written - pkt_start_word);
 
-        // Write payload data to current buffer and increment indices
-        (*current_buffer)[current_index] =
-            payload_host[payload_index / PAYLOAD_WRITE_WIDTH].words[payload_index % PAYLOAD_WRITE_WIDTH];
-        line_length++;
-        current_index++;
-        payload_index++;
-
-        // Print to log file character by character
-        // for (int byte_idx = 0; byte_idx < 8; ++byte_idx) {
-        //   char byte = (payload_host[(payload_index - 1) / PAYLOAD_WRITE_WIDTH]
-        //                    .words[(payload_index - 1) % PAYLOAD_WRITE_WIDTH] >>
-        //                (byte_idx * 8)) &
-        //               0xFF;
-        //   current_log_line += byte;
-        // }
-
-        // Check for end of line ('\n') at the MSB of the uint64_t
-        if ((((*current_buffer)[current_index - 1] >> 56) & 0xFF) == '\n') {
-          // Write line length at start index
-          (*current_buffer)[start_index] = ((event_index & 0xFFFFFFFFULL) << 32) | (line_length & 0xFFFFFFFFULL);
-          line_length = 0;
-          start_index = current_index;
-          current_index++;
-          event_index++;
-
-          // output_logfile << current_log_line;
-          // current_log_line.clear();
-        }
-
-        if (done && (payload_index >= num_words_written)) {
-          // End of file reached, write final line length and break
-          total_bytes += BUFFER_SIZE * sizeof(uint64_t);
-          if (start_index < BUFFER_SIZE) {
-            (*current_buffer)[start_index] = 0;
+        // 4. Publish descriptors and notify consumers under mutex (brief microsecond critical section)
+        if (!local_descs.empty()) {
+          boost::unique_lock<boost::interprocess::interprocess_mutex> lock(shm->ctrl.mutex);
+          for (const auto &d : local_descs) {
+            shm->descriptors[shm->ctrl.desc_tail % DESC_RING_SIZE] = d;
+            shm->ctrl.desc_tail++;
           }
-          buffers[buf_idx]->push_front();
-          break;
+          shm->ctrl.not_empty.notify_all();
         }
       }
     }
@@ -454,11 +461,11 @@ int main(int argc, char *argv[]) {
   auto endTime = std::chrono::high_resolution_clock::now();
   std::cout << "Kernels stopped.\n" << std::endl;
 
-  // Send sentinel (empty buffer) to each buffer to signal end
-  for (int i = 0; i < num_threads; ++i) {
-    auto buffer = buffers[i]->peek_front();
-    (*buffer)[0] = 0;
-    buffers[i]->push_front();
+  // Signal termination to all consumer worker threads
+  {
+    boost::unique_lock<boost::interprocess::interprocess_mutex> lock(shm->ctrl.mutex);
+    shm->ctrl.is_done = true;
+    shm->ctrl.not_empty.notify_all();
   }
 
   // Get elapsed time in seconds

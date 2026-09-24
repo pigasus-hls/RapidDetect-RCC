@@ -25,6 +25,7 @@ SOFTWARE.
 #include <boost/interprocess/managed_shared_memory.hpp>
 #include <chrono>
 #include <thread>
+#include <memory>
 #include <cstdint>
 #include <atomic>
 #include <vector>
@@ -32,7 +33,6 @@ SOFTWARE.
 #include <fstream>
 #include <string>
 #include <cstring>
-#include <bounded_buffer.h>
 #include <shm_config.h>
 #include <array>
 #include <hs.h>
@@ -50,16 +50,13 @@ std::vector<std::ofstream> detections;
 static int onMatch(unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags, void* context) {
   MatchContext* ctx = (MatchContext*)context;
   std::string matched(ctx->data + from, ctx->data + to);
-  detections[ctx->tid] << ctx->event_index << "\n" << std::string(ctx->data, ctx->length);
+  detections[ctx->tid] << ctx->event_index << "\t" << std::string(ctx->data, ctx->length);
   // std::cout << "Pattern " << id << " matched \"" << matched << "\" at offset "
   //    << from << "-" << to << std::endl;
   return 0;
 }
 
-// Define the array type to be stored in shared memory (raw bytes)
-typedef std::array<std::uint64_t, BUFFER_SIZE> array;
 
-typedef bounded_buffer<array, QUEUE_SIZE> BoundedBuffer;
 
 int main(int argc, char* argv[]) {
   if (argc < 2 || argc > 3) {
@@ -104,20 +101,15 @@ int main(int argc, char* argv[]) {
 
   std::cout << "Opening shared memory object \"MySharedMemory\"" << std::endl;
   boost::interprocess::managed_shared_memory segment(boost::interprocess::open_only, "MySharedMemory");
-  std::vector<BoundedBuffer*> buffers;
-  for (int i = 0; i < num_threads; ++i) {
-    std::string buf_name = "BoundedBuffer" + std::to_string(i);
-    BoundedBuffer* bb = segment.find<BoundedBuffer>(buf_name.c_str()).first;
-    if (!bb) {
-      std::cerr << "Failed to find " << buf_name << " in shared memory" << std::endl;
-      return 1;
-    }
-    buffers.push_back(bb);
+  SharedMemoryLayout* shm = segment.find<SharedMemoryLayout>("SharedMemoryLayout").first;
+  if (!shm) {
+    std::cerr << "Failed to find SharedMemoryLayout in shared memory" << std::endl;
+    hs_free_database(db);
+    return 1;
   }
 
   std::atomic<std::int64_t> number_popped(0);
   std::atomic<size_t> total_bytes_processed(0);
-  std::atomic<int> sentinels_seen(0);
 
   detections.resize(num_threads);
   for (int i = 0; i < num_threads; ++i) {
@@ -138,56 +130,74 @@ int main(int argc, char* argv[]) {
       std::cerr << "Thread " << tid << ": Failed to allocate scratch space" << std::endl;
       return;
     }
-    BoundedBuffer* my_buffer = buffers[tid];
+
+    PacketDesc local_descs[PACKETS_PER_CLAIM];
 
     while (true) {
-      auto buffer = my_buffer->peek_back();
+      uint64_t start_desc = 0;
+      uint64_t count = 0;
+      uint64_t my_ticket = 0;
 
-      // Print all data in the buffer as characters
-      // for (size_t i = 0; i < BUFFER_SIZE; ++i) {
-      //     uint64_t temp = (*buffer)[i];
-      //     for (size_t j = 0; j < 8; ++j) {
-      //         std::cout << (char) (temp & 0xFF);
-      //         temp >>= 8;
-      //     }
-      // }
-      // std::cout << std::endl;
+      // Claim up to PACKETS_PER_CLAIM descriptors under mutex
+      {
+        boost::unique_lock<boost::interprocess::interprocess_mutex> lock(shm->ctrl.mutex);
+        shm->ctrl.not_empty.wait(lock, [&]() {
+          return (shm->ctrl.desc_head < shm->ctrl.desc_tail) || shm->ctrl.is_done;
+        });
 
-      // Check for sentinel (empty buffer)
-      if ((*buffer)[0] == 0) {
-        // Only process up to this point in the batch
-        break;
+        if (shm->ctrl.desc_head == shm->ctrl.desc_tail && shm->ctrl.is_done) {
+          shm->ctrl.not_empty.notify_all();
+          break; // All packets consumed, exit thread
+        }
+
+        count = std::min((uint64_t)PACKETS_PER_CLAIM, shm->ctrl.desc_tail - shm->ctrl.desc_head);
+        start_desc = shm->ctrl.desc_head;
+        shm->ctrl.desc_head += count;
+
+        // Copy claimed descriptors to local thread stack inside mutex (prevents race condition)
+        for (uint64_t i = 0; i < count; ++i) {
+          local_descs[i] = shm->descriptors[(start_desc + i) % DESC_RING_SIZE];
+        }
+
+        // Notify producer that descriptor slots were freed
+        shm->ctrl.not_full.notify_all();
+
+        my_ticket = shm->ctrl.next_ticket++;
+        uint32_t chunk_monotonic_end = local_descs[count - 1].monotonic_end;
+        shm->ctrl.retire_tracker[my_ticket % MAX_INFLIGHT_CLAIMS] = {chunk_monotonic_end, false};
       }
 
-      int current_index = 0;
-      while (true) {
-        if (current_index >= BUFFER_SIZE) {
-          break;
-        }
+      // Scan claimed packets lock-free using local descriptors
+      for (uint64_t i = 0; i < count; ++i) {
+        const PacketDesc& desc = local_descs[i];
+        const char* data = reinterpret_cast<const char*>(&shm->payload[desc.offset]);
+        MatchContext ctx = {data, desc.length, desc.event_index, static_cast<uint64_t>(tid)};
 
-        uint64_t metadata = (*buffer)[current_index];
-        uint64_t event_index = (metadata >> 32) & 0xFFFFFFFFULL;
-
-        // Get string length
-        size_t str_len = ((*buffer)[current_index] & 0xFFFFFFFFULL) * 8;
-        if (str_len == 0) {
-          break;  // No more strings in this buffer
-        }
-
-        const char* data = reinterpret_cast<const char*>(&(*buffer)[current_index + 1]);
-        MatchContext ctx = {data, str_len, event_index, static_cast<uint64_t>(tid)};
-
-        err = hs_scan(db, data, str_len, 0, scratch, onMatch, &ctx);
+        err = hs_scan(db, data, desc.length, 0, scratch, onMatch, &ctx);
         if (err != HS_SUCCESS) {
           std::cerr << "Thread " << tid << ": Error scanning data" << std::endl;
         }
-        total_bytes_processed.fetch_add(str_len);
+        total_bytes_processed.fetch_add(desc.length);
         number_popped.fetch_add(1);
-
-        current_index += 1 + str_len / 8;  // Move to next string
       }
-      // Pop the processed items
-      my_buffer->pop_back();
+
+      // In-order retirement under mutex
+      {
+        boost::unique_lock<boost::interprocess::interprocess_mutex> lock(shm->ctrl.mutex);
+        shm->ctrl.retire_tracker[my_ticket % MAX_INFLIGHT_CLAIMS].completed = true;
+        bool retired_any = false;
+        while (shm->ctrl.retired_ticket < shm->ctrl.next_ticket &&
+               shm->ctrl.retire_tracker[shm->ctrl.retired_ticket % MAX_INFLIGHT_CLAIMS].completed) {
+          uint64_t slot = shm->ctrl.retired_ticket % MAX_INFLIGHT_CLAIMS;
+          shm->ctrl.payload_head = shm->ctrl.retire_tracker[slot].end_monotonic_offset;
+          shm->ctrl.retire_tracker[slot].completed = false; // Reset for next epoch
+          shm->ctrl.retired_ticket++;
+          retired_any = true;
+        }
+        if (retired_any) {
+          shm->ctrl.not_full.notify_all();
+        }
+      }
     }
     hs_free_scratch(scratch);
   };
@@ -215,36 +225,27 @@ int main(int argc, char* argv[]) {
   }
 
   hs_free_database(db);
-  // Destroy all BoundedBuffers
-  for (int i = 0; i < num_threads; ++i) {
-    std::string buf_name = "BoundedBuffer" + std::to_string(i);
-    segment.destroy<BoundedBuffer>(buf_name.c_str());
-  }
+  segment.destroy<SharedMemoryLayout>("SharedMemoryLayout");
   std::cout << "Child process done." << std::endl;
 
   // Combine all detection logs into a single file
 
   std::vector<std::ifstream> detection_inputs;
-  std::vector<std::pair<int, std::string>> all_detections;
+  std::vector<std::pair<uint64_t, std::string>> all_detections;
   std::ofstream detection_output("all_detections.log");
   detection_inputs.resize(num_threads);
   for (int i = 0; i < num_threads; ++i) {
     detections[i].close();
     detection_inputs[i].open("detections_thread_" + std::to_string(i) + ".log");
-    bool is_index = true;
-    uint64_t index = 0;
-    while (!detection_inputs[i].eof()) {
-      std::string line;
-      std::getline(detection_inputs[i], line);
-      // Skip empty lines
+    std::string line;
+    while (std::getline(detection_inputs[i], line)) {
       if (line.empty()) continue;
-
-      if (is_index) {
-        index = std::stoull(line);
-      } else {
-        all_detections.emplace_back(index, line);
+      size_t tab_pos = line.find('\t');
+      if (tab_pos != std::string::npos) {
+        uint64_t index = std::stoull(line.substr(0, tab_pos));
+        std::string payload = line.substr(tab_pos + 1);
+        all_detections.emplace_back(index, payload);
       }
-      is_index = !is_index;
     }
     detection_inputs[i].close();
     // Remove the individual detection log file
@@ -252,10 +253,10 @@ int main(int argc, char* argv[]) {
     std::remove(filename.c_str());
   }
 
-  // Sort all detections by global event index
+  // Sort all detections by global event index (64-bit uint64_t)
   std::sort(
       all_detections.begin(), all_detections.end(),
-      [](const std::pair<int, std::string>& a, const std::pair<int, std::string>& b) { return a.first < b.first; });
+      [](const std::pair<uint64_t, std::string>& a, const std::pair<uint64_t, std::string>& b) { return a.first < b.first; });
 
   for (const auto& detection : all_detections) {
     // Strip FFs from detection.second
