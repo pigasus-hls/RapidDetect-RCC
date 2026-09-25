@@ -264,9 +264,9 @@ int main(int argc, char *argv[]) {
   std::cout << "Kernel status before start - Source: 0x" << std::hex << read_val_source << ", Sink: 0x" << read_val_sink
             << ", Payload Write: 0x" << read_val_payload << std::dec << std::endl;
 
-  // Start by writing to ap_start for source and sink
+  // Start rules kernel and start payload write kernel on Buffer 0 (A_ADDRESS) with auto_restart enabled (0x81)
   read_val_source = rapidd_write_reg(pf, RULES_ADDRESS, AP_CTRL_OFFSET, 0x1);
-  read_val_payload = rapidd_write_reg(pf, PAYLOAD_WRITE_ADDRESS, AP_CTRL_OFFSET, 0x1);
+  read_val_payload = rapidd_write_reg(pf, PAYLOAD_WRITE_ADDRESS, AP_CTRL_OFFSET, 0x81);
 
   // Use chrono to measure execution time
   auto startTime = std::chrono::high_resolution_clock::now();
@@ -296,25 +296,30 @@ int main(int argc, char *argv[]) {
   while (!rules_stopped || ((read_val_sink & 0b100) == 0) || !payload_stopped || ((read_val_payload & 0b100) == 0)) {
     // If payload write kernel is "done", wait for the other kernels to finish
     if (!done) {
-      // Wait for payload sink to finish
-      while ((read_val_payload & 0b100) == 0)
-        read_val_payload = rapidd_read_reg(pf, PAYLOAD_WRITE_ADDRESS, AP_CTRL_OFFSET);
+      // 1. Pre-stage alternate buffer into mailbox shadow registers and arm auto-restart
+      rapidd_write_reg(pf, PAYLOAD_WRITE_ADDRESS, PAYLOAD_ADDR_H_OFFSET, PAYLOAD_ADDRESS[1 - currentPayloadBuffer]);
+      rapidd_write_reg(pf, PAYLOAD_WRITE_ADDRESS, PAYLOAD_MAILBOX_INPUT_OFFSET, 0x1);
+      rapidd_write_reg(pf, PAYLOAD_WRITE_ADDRESS, PAYLOAD_MAILBOX_OUTPUT_OFFSET, 0x1);
 
-      // Read return status from kernel registers (num_words_written, overflow, done)
+      uint32_t ctrl_val = (rapidd_read_reg(pf, PAYLOAD_WRITE_ADDRESS, AP_CTRL_OFFSET) & 0b100) ? 0x81 : 0x80;
+      rapidd_write_reg(pf, PAYLOAD_WRITE_ADDRESS, AP_CTRL_OFFSET, ctrl_val);
+
+      // 2. Wait for current buffer to complete (check ISR bit 0)
+      while ((rapidd_read_reg(pf, PAYLOAD_WRITE_ADDRESS, PAYLOAD_ISR_OFFSET) & 0x1) == 0);
+
+      // Clear the ISR done flag (Toggle-on-Write)
+      rapidd_write_reg(pf, PAYLOAD_WRITE_ADDRESS, PAYLOAD_ISR_OFFSET, 0x1);
+
+      // 3. Immediately turn off auto-restart so the active iteration finishes without launching yet another!
+      rapidd_write_reg(pf, PAYLOAD_WRITE_ADDRESS, AP_CTRL_OFFSET, 0x00);
+
+      // Read return status of the completed buffer
       uint32_t num_words_written = rapidd_read_reg(pf, PAYLOAD_WRITE_ADDRESS, PAYLOAD_RETURN_OFFSET);
       uint32_t return_flags = rapidd_read_reg(pf, PAYLOAD_WRITE_ADDRESS, PAYLOAD_RETURN_FLAGS_OFFSET);
       bool overflow = return_flags & 0x1;
       done = (return_flags >> 8) & 0x1;
       if (overflow) {
         std::cerr << "Payload write kernel overflow detected!" << std::endl;
-      }
-
-      currentPayloadBuffer = (currentPayloadBuffer + 1) % 2;
-
-      // Immediately start next payload write kernel on the other buffer to overlap execution and data transfer
-      if (!done) {
-        rapidd_write_reg(pf, PAYLOAD_WRITE_ADDRESS, PAYLOAD_ADDR_H_OFFSET, PAYLOAD_ADDRESS[currentPayloadBuffer]);
-        read_val_payload = rapidd_write_reg(pf, PAYLOAD_WRITE_ADDRESS, AP_CTRL_OFFSET, 0x1);
       }
 
       // Read the payload results directly into shared memory (zero-copy)
@@ -326,7 +331,7 @@ int main(int argc, char *argv[]) {
         uint64_t write_offset = 0;
         uint32_t burst_monotonic_start = 0;
 
-        // 1. Reserve slice under mutex (held only for microseconds!)
+        // Reserve slice under mutex (held only for microseconds!)
         {
           boost::unique_lock<boost::interprocess::interprocess_mutex> lock(shm->ctrl.mutex);
           shm->ctrl.not_full.wait(lock, [&]() {
@@ -334,8 +339,8 @@ int main(int argc, char *argv[]) {
             uint64_t in_flight_bytes = shm->ctrl.payload_tail - shm->ctrl.payload_head;
             uint64_t cur_offset = shm->ctrl.payload_tail % PAYLOAD_RING_SIZE;
             uint64_t pad = (cur_offset + burst_bytes > PAYLOAD_RING_SIZE)
-                               ? (PAYLOAD_RING_SIZE - cur_offset + leftover_bytes)
-                               : 0;
+                                ? (PAYLOAD_RING_SIZE - cur_offset + leftover_bytes)
+                                : 0;
             return (in_flight_desc + max_descriptors <= DESC_RING_SIZE) &&
                    (in_flight_bytes + burst_bytes + pad <= PAYLOAD_RING_SIZE);
           });
@@ -357,12 +362,12 @@ int main(int argc, char *argv[]) {
           shm->ctrl.payload_tail += burst_bytes;
         } // Unlock mutex! Consumers can claim and retire concurrently during PCIe DMA!
 
-        // 2. Direct DMA into shared memory ring buffer! (Lock-free PCIe DMA)
-        read_data(c2h_queue, PAYLOAD_ADDRESS[1 - currentPayloadBuffer] << 32,
+        // 4. Direct DMA into shared memory ring buffer! (Lock-free PCIe DMA)
+        read_data(c2h_queue, PAYLOAD_ADDRESS[currentPayloadBuffer] << 32,
                   burst_bytes, (char *)&shm->payload[write_offset]);
         total_bytes += burst_bytes;
 
-        // 3. Flit-stride boundary scan in-place directly on shm->payload (Lock-free)
+        // Flit-stride boundary scan in-place directly on shm->payload (Lock-free)
         local_descs.clear();
         const uint64_t *burst_words = reinterpret_cast<const uint64_t *>(&shm->payload[write_offset]);
         uint64_t pkt_start_word = 0;
@@ -389,7 +394,7 @@ int main(int argc, char *argv[]) {
         }
         leftover_words += (num_words_written - pkt_start_word);
 
-        // 4. Publish descriptors and notify consumers under mutex (brief microsecond critical section)
+        // Publish descriptors and notify consumers under mutex (brief microsecond critical section)
         if (!local_descs.empty()) {
           boost::unique_lock<boost::interprocess::interprocess_mutex> lock(shm->ctrl.mutex);
           for (const auto &d : local_descs) {
@@ -399,6 +404,9 @@ int main(int argc, char *argv[]) {
           shm->ctrl.not_empty.notify_all();
         }
       }
+
+      // Switch active buffer index (current buffer completed and DMA'd; alternate buffer is now running in HW)
+      currentPayloadBuffer = 1 - currentPayloadBuffer;
     }
 
     // Read the status of the source,  rule result sink and payload write kernels to check if they are done

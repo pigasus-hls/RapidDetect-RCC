@@ -58,7 +58,7 @@ ALL_KERNELS = [
     # 'payloadSinkKernel',
     'payloadWriteKernel',
     # 'convertToEthernetKernel',
-    'fromEthernetKernel',
+    # 'fromEthernetKernel',
     # 'fieldTaggerKernel',
     # 'sm_kernel',
     # 'nf_kernel',
@@ -93,6 +93,9 @@ def set_common_config(cfg_file, kernel_name):
 
     cfg_file.set_values(section='hls', key='syn.file', values=rel_src_files)
     cfg_file.set_value(section='hls', key='syn.cflags', value=f'-I{rel_include_dir} ' + CFLAGS)
+
+    if kernel_name == 'payloadWriteKernel':
+        cfg_file.set_value(section='hls', key='syn.interface.s_axilite_mailbox', value='both')
 
 def build_single_kernel_worker(kernel_name):
     """Executes inside its own vitis process using the pure Vitis Python API."""

@@ -100,6 +100,13 @@ void setup_payload_kernel(unsigned int pf, uint64_t sink_addr, uint32_t tick_cou
   rapidd_write_reg(pf, PAYLOAD_WRITE_ADDRESS, PAYLOAD_MAX_SIZE_OFFSET, max_size);
   std::cout << "[Payload Write Kernel] Wrote payload output size cap = 0x" << std::hex << max_size << std::dec
             << std::endl;
+
+  // Enable ap_done interrupt in IER (0x08) so ISR (0x0C) latches completions during auto-restart
+  rapidd_write_reg(pf, PAYLOAD_WRITE_ADDRESS, PAYLOAD_IER_OFFSET, 0x1);
+
+  // Commit initial mailbox input and output
+  rapidd_write_reg(pf, PAYLOAD_WRITE_ADDRESS, PAYLOAD_MAILBOX_INPUT_OFFSET, 0x1);
+  rapidd_write_reg(pf, PAYLOAD_WRITE_ADDRESS, PAYLOAD_MAILBOX_OUTPUT_OFFSET, 0x1);
 }
 
 void reset_rapidd_design(unsigned int pf) {
