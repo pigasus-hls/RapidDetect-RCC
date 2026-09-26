@@ -95,7 +95,7 @@ struct PayloadWordPack {
 
 // Aligned write data struct; multiple words per flit; possibly multiple flits per write.
 struct PayloadWritePack {
-  PAYLOAD_WORD words[HOST_PAYLOAD_WIDTH];
+  PAYLOAD_WORD words[PAYLOAD_WRITE_WIDTH];
 };
 
 struct PayloadWritePackFlit {
