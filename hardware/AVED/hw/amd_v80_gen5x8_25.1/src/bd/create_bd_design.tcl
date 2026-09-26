@@ -3965,7 +3965,7 @@ proc create_hier_cell_RapidDetect { parentCell nameHier } {
 
   # Create instance: payloadWriteKernel_0, and set properties
   set payloadWriteKernel_0 [ create_bd_cell -type ip -vlnv xilinx.com:hls:payloadWriteKernel:1.0 payloadWriteKernel_0 ]
-  set_property CONFIG.C_M_AXI_GMEM0_DATA_WIDTH {128} $payloadWriteKernel_0
+  set_property CONFIG.C_M_AXI_GMEM0_DATA_WIDTH {256} $payloadWriteKernel_0
 
 
   # Create instance: SmForwardPayloadPipe, and set properties
@@ -5142,7 +5142,7 @@ proc create_root_design { parentCell } {
  ] [get_bd_intf_pins /axi_noc_mc_ddr4_1/S00_INI]
 
   set_property -dict [ list \
-   CONFIG.CONNECTIONS {MC_3 {read_bw {1} write_bw {8000} read_avg_burst {4} write_avg_burst {4}}} \
+   CONFIG.CONNECTIONS {MC_3 {read_bw {1} write_bw {6250} read_avg_burst {4} write_avg_burst {4}}} \
    CONFIG.NOC_PARAMS {} \
    CONFIG.CATEGORY {pl} \
  ] [get_bd_intf_pins /axi_noc_mc_ddr4_1/S01_AXI]

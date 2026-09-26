@@ -31,7 +31,7 @@ import subprocess
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 # Set design parameters for synthesis of 200Gbps design
-CFLAGS = '-DNO_MY_ASSERT=1 -DMSPM_TRACKPOS=1 -DNFPM_TRACKPOS=1 -DMSPM_RESOLVE_CONFLICT=1 -DTEST_SAMEFLOW=0 -DTEST_PREPEND7=0 -DMSPM_UNROLL=8 -DMSPM_CHECKFIELD=1 -DIO_HBM_NUM_CHANNELS=2 -DNFPM_UNROLL=2 -DNFPM_CHECKFIELD=1'
+CFLAGS = '-DNO_MY_ASSERT=1 -DMSPM_TRACKPOS=1 -DNFPM_TRACKPOS=1 -DMSPM_RESOLVE_CONFLICT=1 -DTEST_SAMEFLOW=0 -DTEST_PREPEND7=0 -DMSPM_UNROLL=8 -DMSPM_CHECKFIELD=1 -DIO_HBM_NUM_CHANNELS=2 -DNFPM_UNROLL=2 -DNFPM_CHECKFIELD=1 -DPAYLOAD_WRITE_MULT=2'
 
 # Choose V80
 FPGA = 'xcv80-lsva4737-2MHP-e-S'
@@ -50,20 +50,20 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 HARDWARE_DIR = os.path.dirname(SCRIPT_DIR)
 
 ALL_KERNELS = [
-    # 'payloadSourceKernel',
-    # 'payloadReadKernel',
-    # 'mergePipesKernel',
-    # 'resultWriteKernel',
-    # 'resultSinkKernel',
-    # 'payloadSinkKernel',
+    'payloadSourceKernel',
+    'payloadReadKernel',
+    'mergePipesKernel',
+    'resultWriteKernel',
+    'resultSinkKernel',
+    'payloadSinkKernel',
     'payloadWriteKernel',
-    # 'convertToEthernetKernel',
-    # 'fromEthernetKernel',
-    # 'fieldTaggerKernel',
-    # 'sm_kernel',
-    # 'nf_kernel',
-    # 'sm2nfKernel',
-    # 'nf2hostKernel'
+    'convertToEthernetKernel',
+    'fromEthernetKernel',
+    'fieldTaggerKernel',
+    'sm_kernel',
+    'nf_kernel',
+    'sm2nfKernel',
+    'nf2hostKernel'
 ]
 
 # Set HLS Synthesis configuration parameters for a kernel

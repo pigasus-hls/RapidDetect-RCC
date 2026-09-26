@@ -108,16 +108,16 @@ echo "Both processes running. Streaming outputs (Ctrl+C to stop)..."
 echo "--------------------------------------------------"
 
 # Tail both logs in background
-tail -n 20 -f producer.log | sed 's/^/[PRODUCER] /' &
+stdbuf -oL tail -n 20 -f producer.log | stdbuf -oL sed 's/^/[PRODUCER] /' &
 TAIL_PRODUCER_PID=$!
-tail -n 20 -f consumer.log | sed 's/^/[CONSUMER] /' &
+stdbuf -oL tail -n 20 -f consumer.log | stdbuf -oL sed 's/^/[CONSUMER] /' &
 TAIL_CONSUMER_PID=$!
 
 # Wait for the first process to terminate
 wait -n -p FINISHED_PID $PRODUCER_PID $CONSUMER_PID
 STATUS=$?
 
-if [ "$FINISHED_PID" -eq "$PRODUCER_PID" ]; then
+if [ -n "$FINISHED_PID" ] && [ "$FINISHED_PID" -eq "$PRODUCER_PID" ]; then
     if [ $STATUS -ne 0 ]; then
         echo "Error: Producer exited with status $STATUS. Terminating consumer..."
         kill $CONSUMER_PID 2>/dev/null
@@ -131,7 +131,7 @@ if [ "$FINISHED_PID" -eq "$PRODUCER_PID" ]; then
             exit $CONSUMER_STATUS
         fi
     fi
-elif [ "$FINISHED_PID" -eq "$CONSUMER_PID" ]; then
+elif [ -n "$FINISHED_PID" ] && [ "$FINISHED_PID" -eq "$CONSUMER_PID" ]; then
     if [ $STATUS -ne 0 ]; then
         echo "Error: Consumer exited with status $STATUS. Terminating producer..."
         kill $PRODUCER_PID 2>/dev/null

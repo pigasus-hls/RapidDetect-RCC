@@ -210,6 +210,15 @@ int main(int argc, char *argv[]) {
   // Allocate test pattern buffers
   StripedVector<RawPayloadPack, IO_HBM_NUM_CHANNELS, MSPM_MASK_WIDTH * MSPM_UNROLL / IO_HBM_NUM_CHANNELS> traceBuffer;
   UINT totalTraceSize = loadRawTraceInput(traceBuffer, trace_file);
+  if (totalTraceSize == 0) {
+    std::cerr << "Error: Failed to load trace file (file not found or empty): " << trace_file << std::endl;
+    {
+      boost::unique_lock<boost::interprocess::interprocess_mutex> lock(shm->ctrl.mutex);
+      shm->ctrl.is_done = true;
+      shm->ctrl.not_empty.notify_all();
+    }
+    return 1;
+  }
 
   // Allocate host memory for trace results
   RidBcntPack *trace_host;
@@ -422,6 +431,7 @@ int main(int argc, char *argv[]) {
     uint16_t overflow_error_local[2] = {overflow_error_count >> 16, overflow_error_count & 0xFFFF};
 
     if (overflow_error_count) {
+      // std::cout << "Overflow Count: [" << overflow_error_local[0] << ", " << overflow_error_local[1] << "]" << std::endl;
       std::cerr << "\033[31m[ERROR] Overflow error detected in Ethernet kernel!\033[0m\n\033[31m[ERROR] Reduce "
                    "throttle rate for correctness.\033[0m"
                 << std::endl;
